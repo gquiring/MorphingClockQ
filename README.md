@@ -1,4 +1,4 @@
-First off make sure from the board manager you select 2.7.x for the ESP8266, any 3.x version will not compile
+First off make sure from the board manager you select 2.7.x for the ESP8266, any 3.x version will not compile.
 Visit this site to get a free account for your weather API key: openweathermap.org
 Next is to edit the params.h file (which needs to be renamed).  You must setup your SSID, password, timezone, weather api key and several other options.  
 
