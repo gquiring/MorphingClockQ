@@ -922,8 +922,17 @@ void draw_weather ()
     //draw wind speed and direction
     if (wind_speed > -10000)
     { 
-      if (wind_speed != 0)
-        wind_lstr = String (wind_direction) + String (wind_speed) + (" ");
+      if (wind_speed != 0) {
+        wind_lstr = String (wind_direction) + String (wind_speed);
+        switch (wind_lstr.length ()) {     //We have to pad the string to exactly 4 characters
+        case 2:
+         wind_lstr = String ("  ") + String (wind_lstr);
+         break;
+        case 3:
+         wind_lstr = String (" ") + String (wind_lstr);
+         break;
+        }      
+      }  
       else
         wind_lstr = String ("CALM ");   
         
@@ -1268,6 +1277,7 @@ void web_server ()
       init_config_vars ();
       vars_write ();
       vars_read ();
+      httprsp += "<strong>Config file resetted</strong><br>";
     }
     //
     httprsp += "<br>MORPH CLOCK<br>";
@@ -1291,11 +1301,11 @@ void web_server ()
     //openweathermap.org
     httprsp += "<br>openweathermap.org API key<br>";
     httprsp += "<form action='/owm/'>" \
-      "http://<input type='text' name='owmkey' value='" + String(c_vars[EV_OWMK]) + "'>(hex string)<br>" \
+      "http://<input type='text' name='owmkey' value='" + String(c_vars[EV_OWMK]) +           "'>(hex string)<br>" \
       "<input type='submit' value='set OWM key'></form><br>";
 
     //geo location
-     httprsp += "<br>location: city,country<br>";
+     httprsp += "<br>Location: City,Country<br>";
     httprsp += "<form action='/geoloc/'>" \
       "http://<input type='text' name='geoloc' value='" + String(c_vars[EV_GEOLOC]) + "'>(e.g.: New York City,NY)<br>" \
       "<input type='submit' value='set Location'></form><br>";
