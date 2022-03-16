@@ -26,3 +26,4 @@ Added urldecode function to remove the special characters from web entries.  The
 
 Added day of week to the dateline.  Right now it's hardcoded for Sun being the first day of week.
 
+Wind and humidity will be alternately displayed every 10 seconds.
