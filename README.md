@@ -22,4 +22,7 @@ Modifed the NTP code to actually compile, the version I had refused to compile w
 
 Added more configuration options to the web interface.
 
-Added urldecode function to remove the special characters from web entries.  They were being written to the config file which caused issues.  
+Added urldecode function to remove the special characters from web entries.  They were being written to the config file which caused issues.
+
+Added day of week to the dateline.  Right now it's hardcoded for Sun being the first day of week.
+
