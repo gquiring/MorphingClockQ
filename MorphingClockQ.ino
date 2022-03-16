@@ -30,6 +30,8 @@ Fixed the config file writing.  location and apiKey were declared as Strings whi
 it was easier to declare them as char arrays and it worked.
 Added Reset Config File to web options.  Most likely for developer use only.  It's handy when the file is corrupt.    
 Added urldecode function to remove %20's from the web entries
+Added day of week to the date line
+
 
 
 Required to compile:
@@ -192,7 +194,7 @@ byte nosee = 100;
   byte img_y = 2;
 
 // Date position
-  byte date_x = 3*TF_COLS;
+  byte date_x = 2;
   byte date_y = 26;
 
 // Temperature position
@@ -364,9 +366,9 @@ void show_config_vars ()
   Serial.println (c_vars[EV_METRIC]);
   Serial.print ("Date-Format=");
   Serial.println (c_vars[EV_DATEFMT]);
-  Serial.print ("apiKey");
+  Serial.print ("apiKey=");
   Serial.println (c_vars[EV_OWMK]);
-  Serial.print ("Location");
+  Serial.print ("Location=");
   Serial.println (c_vars[EV_GEOLOC]);
   Serial.print ("DST=");
   Serial.println (c_vars[EV_DST]);
@@ -512,10 +514,8 @@ void getWeather ()
     Serial.println ("connected."); 
     // Make a HTTP request: 
     client.print ("GET /data/2.5/weather?"); 
- //   client.print ("q="+ String(location));      //GQGQ added String(location)
- //   client.print ("&appid="+ String(apiKey));   //GQGQ added String(apiKey)
-    client.print ("q="+ String(c_vars[EV_GEOLOC]));      //GQGQ added String(location)
-    client.print ("&appid="+ String(c_vars[EV_OWMK]));   //GQGQ added String(apiKey)
+    client.print ("q="+ String(c_vars[EV_GEOLOC]));      //GQGQ fixed reference to use config file
+    client.print ("&appid="+ String(c_vars[EV_OWMK]));   //GQGQ fixed reference to use config file
     client.print ("&cnt=1"); 
     (*u_metric=='Y')?client.println ("&units=metric"):client.println ("&units=imperial");
     client.println ("Host: api.openweathermap.org"); 
@@ -636,7 +636,7 @@ void getWeather ()
     }
     else
     {
-      Serial.println ("windspeed NOT found!");    
+      Serial.println ("windspeed NOT found 1!");    
       gust = 0;
     }   
   //wind speed
@@ -648,7 +648,7 @@ void getWeather ()
       wind_speed = sval.toInt();
     }
     else
-      Serial.println ("windspeed NOT found!");
+      Serial.println ("windspeed NOT found 2!");
     // timezone offset
      bT = line.indexOf ("\"timezone\":");
     if (bT > 0)
@@ -705,7 +705,7 @@ void getWeather ()
     }
     else
     {
-      Serial.println ("Windspeed NOT found!");    
+      Serial.println ("Windspeed NOT found 3!");    
       wind_direction = "";
     } 
   }//connected
@@ -1004,13 +1004,35 @@ void draw_date ()
     }
   }
   //
-  if (lstr.length())
-  {
-        xo = date_x; yo = date_y;
-        //Date
-        Serial.println (String(year(tnow)));
-        TFDrawText (&display, lstr, xo, yo, cc_date);
+  String DayofWeek = "  ";
+  switch (weekday(tnow)) {
+    case 1:
+      DayofWeek = " SUN";
+      break;
+    case 2:
+      DayofWeek = " MON";
+      break;
+    case 3:
+      DayofWeek = " TUE";
+      break;
+    case 4:
+      DayofWeek = " WED";
+      break;
+    case 5:
+      DayofWeek = " THR";
+      break;
+    case 6:
+      DayofWeek = " FRI";
+      break;
+    case 7:
+      DayofWeek = " SAT";
+      break;
   }
+
+  lstr += String(DayofWeek);
+  
+  if (lstr.length())
+     TFDrawText (&display, lstr, date_x, date_y, cc_date);
 
 }
 
@@ -1168,10 +1190,11 @@ void web_server ()
       if (pidx2 > 0)
       {
         String  location = urldecode ( httprq.substring(pidx + 8, pidx2).c_str() );
-   //     location.toCharArray(c_vars[EV_GEOLOC],location.length()+1);
         strncpy(c_vars[EV_GEOLOC], location.c_str(), LVARS*3 );
         Serial.print ("GELOC changed:");
         Serial.println (c_vars[EV_GEOLOC]);
+        getWeather ();
+        draw_weather_conditions ();
         svf = 1;
       }
     }
@@ -1183,6 +1206,8 @@ void web_server ()
       if (pidx2 > 0)
       {
         strncpy(c_vars[EV_OWMK], httprq.substring(pidx + 8, pidx2).c_str(), LVARS * 3);
+        getWeather ();
+        draw_weather_conditions ();
         svf = 1;
         Serial.print ("APIKEY changed:");
         Serial.println (c_vars[EV_OWMK]);
@@ -1251,14 +1276,16 @@ void web_server ()
     {
       strcpy (c_vars[EV_WANI], "Y");
       httprsp += "<strong>Weather Animation: on</strong><br>";
-      draw_weather ();
+      getWeather ();
+      draw_weather_conditions ();
       svf = 1;
     }
     else if (httprq.indexOf ("GET /weather_animation/off ") != -1)
     {
       strcpy (c_vars[EV_WANI], "N");
       httprsp += "<strong>Weather Animation: off</strong><br>";
-      draw_weather ();
+      getWeather ();
+      draw_weather_conditions ();
       svf = 1;
     }
     else if (httprq.indexOf ("GET /reset_config_file ") != -1)
