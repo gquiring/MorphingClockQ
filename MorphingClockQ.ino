@@ -31,7 +31,7 @@ it was easier to declare them as char arrays and it worked.
 Added Reset Config File to web options.  Most likely for developer use only.  It's handy when the file is corrupt.    
 Added urldecode function to remove %20's from the web entries
 Added day of week to the date line
-
+Wind and humidity will be alternately displayed every 10 seconds
 
 
 Required to compile:
@@ -222,6 +222,9 @@ byte nosee = 100;
   byte wtext_y = 2;
   String weather_text = "        ";
  
+String wind_lstr = "   ";
+String humi_lstr = "   ";
+int wind_humi;
 
 WiFiServer httpsvr (80); //Initialize the server on Port 80
 unsigned char dbri = 255;
@@ -585,8 +588,6 @@ void getWeather ()
         condM = 9; //fog (night)
       //
       condS = sval;
-      Serial.print ("condM ");
-      Serial.println (condM);
     }
     //tempM
     bT = line.indexOf ("\"temp\":");
@@ -636,7 +637,6 @@ void getWeather ()
     }
     else
     {
-      Serial.println ("windspeed NOT found 1!");    
       gust = 0;
     }   
   //wind speed
@@ -699,9 +699,7 @@ void getWeather ()
         default:
           wind_direction = "";
           break;
-    }                
-      Serial.print ("Wind direction: ");      
-      Serial.println(wind_direction);
+      }                
     }
     else
     {
@@ -715,28 +713,11 @@ void getWeather ()
 #include "TinyIcons.h"
 #include "WeatherIcons.h"
 
-
-int *suny_ani[] = {sunny_ico, sunny1_ico, sunny2_ico, sunny1_ico, sunny2_ico};
-int *clod_ani[] = {cloudy_ico, cloudy1_ico, cloudy2_ico, cloudy3_ico, cloudy4_ico, cloudy5_ico, cloudy6_ico, cloudy7_ico, cloudy8_ico, cloudy9_ico};
-int *ovct_ani[] = {ovrcst_ico, ovrcst1_ico, ovrcst2_ico, ovrcst1_ico, ovrcst2_ico};
-int *rain_ani[] = {rain_ico, rain1_ico, rain2_ico, rain3_ico, rain4_ico};
-int *thun_ani[] = {thndr_ico, rain1_ico, rain2_ico, rain3_ico, rain4_ico};
-int *snow_ani[] = {snow_ico, snow1_ico, snow2_ico, snow3_ico, snow4_ico};
-int *mony_ani[] = {moony_ico, moony1_ico, moony_ico, moony_ico, moony_ico, moony2_ico, moony_ico, moony_ico, moony3_ico, moony_ico, moony_ico, moony_ico, moony_ico, moony4_ico, moony_ico, moony_ico, moony_ico};
-int *mist_ani[] = {mist_ico, mist1_ico, mist2_ico, mist3_ico};
-int *mistn_ani[] = {mistn_ico, mist1n_ico, mist2n_ico, mist3n_ico};
-int *clodn_ani[] = {cloudyn_ico, cloudy1n_ico, cloudy2n_ico, cloudy3n_ico, cloudy4n_ico, cloudy5n_ico, cloudy6n_ico, cloudy7n_ico, cloudy8n_ico, cloudy9n_ico};
-int *ovctn_ani[] = {ovrcstn_ico};
-
-
-
 int xo = 1, yo = 26;
 char use_ani = 0;
 void draw_weather_conditions ()
 {
   //0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow, 7, hazy, 9 - fog
-  Serial.print ("Weather Icons condM ");
-  Serial.println (condM);
   
   xo = img_x;
   yo = img_y;
@@ -857,8 +838,6 @@ switch (condM)
 void draw_weather ()
 {
   int value = 0;
-  Serial.println ("Showing the weather");
-  Serial.println (c_vars[EV_TZ]);
   xo = tmp_x; yo = tmp_y; // temperature position
 
   // Clear the top line
@@ -913,8 +892,6 @@ void draw_weather ()
          break;      
     }    
  
-    Serial.print ("Temperature: ");
-    Serial.println (lstr);
     TFDrawText (&display, lstr, xo, yo, lcc); // draw temperature
     
     //weather conditions
@@ -928,46 +905,36 @@ void draw_weather ()
       lcc = cc_blu;
     if (humiM < 20)
       lcc = cc_wht;
-    lstr = String (humiM) + String (humi_label);
-    xo = humi_x;
-    yo = humi_y;
-    TFDrawText (&display, lstr, xo, yo, lcc); // humidity
-    
-    //-pressure
+    humi_lstr = String (humiM) + String (humi_label) + String (" ");
+    TFDrawText (&display, humi_lstr, humi_x, humi_y, lcc); // humidity
+ 
     int cc = color_disp;
-    
     cc = color_disp;
-    lstr = String (presM)+ String(press_label);
-    xo = press_x;
-    yo = press_y;
-  	if(presM < 1000)
-        xo= press_x + 1;   
-    TFDrawText (&display, lstr, xo, yo, cc);
+    
+   //-pressure
+//    lstr = String (presM)+ String(press_label);
+//    xo = press_x;
+//    yo = press_y;
+//  	if(presM < 1000)
+//        xo= press_x + 1;   
+//    TFDrawText (&display, lstr, xo, yo, cc);
    
     //draw wind speed and direction
     if (wind_speed > -10000)
     { 
-      xo = wind_x; yo = wind_y;
       if (wind_speed != 0)
-        lstr = String (wind_direction) + String (wind_speed) + (" ");
+        wind_lstr = String (wind_direction) + String (wind_speed) + (" ");
       else
-        lstr = String ("CALM");
-      
-      Serial.print("Wind:");
-      Serial.println(lstr);
-      TFDrawText (&display,lstr, xo, yo, cc_wind);
+        wind_lstr = String ("CALM ");   
+        
+      wind_humi = 1;  //Reset switch for toggling wind or humidity display
+      TFDrawText (&display,wind_lstr, wind_x, wind_y, cc_wind);
     }
 
     if ( String (c_vars[EV_WANI]) == "N" ) {
-      Serial.print   ("condM:");
-      Serial.println (condM);    
       weather_text_conversion();
       lstr = String (weather_text);
-      xo = wtext_x;
-      yo = wtext_y;
-      TFDrawText (&display,lstr, xo, yo, cc);
-      Serial.print("Weather Text:");
-      Serial.println(weather_text);
+      TFDrawText (&display,lstr, wtext_x, wtext_y, cc);
     }  
     else {
       draw_weather_conditions ();
@@ -1191,8 +1158,6 @@ void web_server ()
       {
         String  location = urldecode ( httprq.substring(pidx + 8, pidx2).c_str() );
         strncpy(c_vars[EV_GEOLOC], location.c_str(), LVARS*3 );
-        Serial.print ("GELOC changed:");
-        Serial.println (c_vars[EV_GEOLOC]);
         getWeather ();
         draw_weather_conditions ();
         svf = 1;
@@ -1209,12 +1174,7 @@ void web_server ()
         getWeather ();
         draw_weather_conditions ();
         svf = 1;
-        Serial.print ("APIKEY changed:");
-        Serial.println (c_vars[EV_OWMK]);
       }
-      //
-      Serial.println (">owm key:");
-      Serial.println (c_vars[EV_OWMK]);
       //
     }
     else if (httprq.indexOf ("GET /wifi/") != -1)
@@ -1288,9 +1248,23 @@ void web_server ()
       draw_weather_conditions ();
       svf = 1;
     }
+    else if (httprq.indexOf ("GET /military/on ") != -1)
+    {
+      strcpy (c_vars[EV_24H], "Y");
+      httprsp += "<strong>Military Time: on</strong><br>";
+      prevhh = -1;
+      svf = 1;
+    }
+    else if (httprq.indexOf ("GET /military/off ") != -1)
+    {
+      strcpy (c_vars[EV_24H], "N");
+      httprsp += "<strong>Military Time: off</strong><br>";
+      prevhh = -1;
+      svf = 1;
+    }
+    //Reset Config file
     else if (httprq.indexOf ("GET /reset_config_file ") != -1)
     {
-      Serial.println ("Reset config file");
       init_config_vars ();
       vars_write ();
       vars_read ();
@@ -1300,6 +1274,8 @@ void web_server ()
     httprsp += "<br>Use the following configuration links<br>";
     httprsp += "<a href='/daylight/on'>Daylight Savings on</a><br>";
     httprsp += "<a href='/daylight/off'>Daylight Savings off</a><br><br>";
+    httprsp += "<a href='/military/on'>Military Time on</a><br>";
+    httprsp += "<a href='/military/off'>Military Time off</a><br><br>";
     httprsp += "<a href='/weather_animation/on'>Weather Animation on</a><br>";
     httprsp += "<a href='/weather_animation/off'>Weather Animation off</a><br><br>";
     
@@ -1341,6 +1317,7 @@ void web_server ()
     
     httprsp += "Current Configuration<br>";
     httprsp += "Daylight: " + String (c_vars[EV_DST]) + "<br>";
+    httprsp += "Military: " + String (c_vars[EV_24H]) + "<br>";
     httprsp += "Timezone: " + String (c_vars[EV_TZ]) + "<br>";
     httprsp += "Weather Animation: " + String (c_vars[EV_WANI]) + "<br>";
     
@@ -1386,7 +1363,7 @@ void web_server ()
 void draw_am_pm ()
 {
       // this sets AM/PM display and is disabled when military time is used
-      if (military[0] = 'N')
+      if (String (c_vars[EV_24H]) == "N")
       {
         if (hh >= 12) 
           TFDrawText (&display, String(" PM"), 42, 19, cc_time);
@@ -1405,7 +1382,9 @@ void set_digit_color ()
     digit4.SetColor (cc_time);
     //If time is less than 10 or greater than 12 o'clock don't show leading zero
     //FYI hh is military time even when set to no
-    if (military[0] == 'N' && (hh < 10 or (hh > 12 && hh < 22) ))
+    Serial.print ("hh:");
+    Serial.println (hh);
+    if (String (c_vars[EV_24H]) == "N" && ( (hh > 12 && hh < 22) ))
      digit5.SetColor (cc_blk);
     else
      digit5.SetColor (cc_time);
@@ -1466,9 +1445,9 @@ void loop()
     //
 
     //military time?
-    if (hh > 12 && military[0] == 'N') // when not using military time
+    if (hh > 12 && String (c_vars[EV_24H]) == "N")  // when not using military time
       hh -= 12;
-    if (hh == 0 and military[0] == 'N') // this makes the first hour of the day 12a when military time isn't used.
+    if (hh == 0 && String (c_vars[EV_24H]) == "N")  // this makes the first hour of the day 12a when military time isn't used.
        hh += 12;
 
     //
@@ -1492,8 +1471,20 @@ void loop()
         if (s1 != digit1.Value ()) digit1.Morph (s1);
       prevss = ss;
       //refresh weather at 30sec in the minute
-      if (ss == 30 && ((mm % weather_refresh) == 0))
+      if (ss == 30 && ((mm % weather_refresh) == 0)) {
         getWeather ();
+      }
+      else if ( (ss % 10) == 0) {       // Toggle display every 10 seconds between wind and humidity
+        if (wind_humi == 1) {
+          TFDrawText (&display,humi_lstr, wind_x, wind_y, cc_wind);
+          wind_humi = 0;
+        }
+        else {
+          TFDrawText (&display,wind_lstr, wind_x, wind_y, cc_wind);
+          wind_humi = 1;
+        }
+      }
+          
     }
     //minutes
     if (mm != prevmm)
@@ -1517,10 +1508,10 @@ void loop()
       draw_am_pm ();
 
       //military time?
-      if (hh > 12 && military[0] == 'N')
+      if (hh > 12 && String (c_vars[EV_24H]) == "N")
         hh -= 12;
       //
-      if (hh == 0 and military[0] == 'N') // this makes the first hour of the day 12a when military time isn't used.
+      if (hh == 0 && String (c_vars[EV_24H]) == "N") // this makes the first hour of the day 12a when military time isn't used.
        hh += 12;
 
      
