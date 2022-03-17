@@ -1,4 +1,3 @@
-
 /*
 Thanks to all who made this project possible!
 
@@ -300,8 +299,6 @@ int vars_write ()
       if (varf.write (c_vars[i][j]) != 1)
         Serial.println ("error writing var");
     }
-  //  varf.write ("\n");
-  //  Serial.println (" ");
   }
   //
   varf.close ();
@@ -450,7 +447,7 @@ void setup ()
     Serial.println ("SPIFFS Initialization...failed");
   }
 
-   String lstr = String ("TIMEZONE:") + String (EV_TZ);
+   String lstr = String ("TIMEZONE:") + String (c_vars[EV_TZ]);
    TFDrawText (&display, lstr, 4, 24, cc_cyan);
    
    show_config_vars ();
