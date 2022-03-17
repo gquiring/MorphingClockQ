@@ -352,7 +352,7 @@ String urldecode(String str)
 //Debugging 
 void show_config_vars ()
 {
-  Serial.println ("From c_vars....");
+  Serial.println ("From config file ....");
   
   Serial.print ("SSID=");
   Serial.println (c_vars[EV_SSID]);
@@ -429,7 +429,7 @@ void setup ()
 #ifdef ESP8266
   display_ticker.attach (0.002, display_updater);
 #endif
-  //
+
   TFDrawText (&display, String ("  MORPH CLOCK  "), 0, 1, cc_blu);
   TFDrawText (&display, String ("  STARTING UP  "), 0, 10, cc_blu);
 
@@ -537,10 +537,14 @@ void getWeather ()
     Serial.println ("connected."); 
     // Make a HTTP request: 
     client.print ("GET /data/2.5/weather?"); 
-    client.print ("q="+ String(c_vars[EV_GEOLOC]));
-    client.print ("&appid="+ String(c_vars[EV_OWMK]));
+    client.print ("q="+ String(c_vars[EV_GEOLOC]));      // City, Country
+    client.print ("&appid="+ String(c_vars[EV_OWMK]));   // API Key
     client.print ("&cnt=1"); 
-    (*u_metric=='Y')?client.println ("&units=metric"):client.println ("&units=imperial");
+    if (String (c_vars[EV_METRIC]) == "Y")
+      client.println ("&units=metric");
+    else
+      client.println ("&units=imperial"); 
+    
     client.println ("Host: api.openweathermap.org"); 
     client.println ("Connection: close");
     client.println (); 
@@ -550,7 +554,16 @@ void getWeather ()
     Serial.println ("Weather:unable to connect");
     return;
   } 
-  delay (1500);
+
+// Sample of what the weather API sends back
+//  {"coord":{"lon":-80.1757,"lat":33.0185},"weather":[{"id":741,"main":"Fog","description":"fog","icon":"50n"},
+//  {"id":500,"main":"Rain","description":"light rain","icon":"10n"}],"base":"stations","main":{"temp":55.47,
+//  "feels_like":55.33,"temp_min":52.81,"temp_max":57.79,"pressure":1014,"humidity":98},"visibility":402,
+//  "wind":{"speed":4.61,"deg":0},"rain":{"1h":0.25},"clouds":{"all":100},
+//  "dt":1647516313,"sys":{"type":2,"id":2034311,"country":"US","sunrise":1647516506,
+//  "sunset":1647559782},"timezone":-14400,"id":4597919,"name":"Summerville","cod":200}
+
+  // delay (1500);  // Why is there a delay here????
   String sval = "";
   int bT, bT2;
   //do your best
@@ -611,21 +624,23 @@ void getWeather ()
       bT2 = line.indexOf (",\"", bT + 7);
       sval = line.substring (bT + 7, bT2);
       tempM = sval.toInt ();
+      Serial.print (tempM);
     }
     else
       Serial.println ("temp NOT found!");
 
       
-    //pressM
-    bT = line.indexOf ("\"pressure\":");
-    if (bT > 0)
-    {
-      bT2 = line.indexOf (",\"", bT + 11);
-      sval = line.substring (bT + 11, bT2);
-      presM = sval.toInt();
-    }
-    else
-      Serial.println ("pressure NOT found!");
+    //pressM  disabled to help speed
+//    bT = line.indexOf ("\"pressure\":");
+//    if (bT > 0)
+//    {
+//      bT2 = line.indexOf (",\"", bT + 11);
+//      sval = line.substring (bT + 11, bT2);
+//      presM = sval.toInt();
+//    }
+//    else
+//      Serial.println ("pressure NOT found!");
+      
     //humiM
     bT = line.indexOf ("\"humidity\":");
     if (bT > 0)
@@ -636,7 +651,8 @@ void getWeather ()
     }
     else
       Serial.println ("humidity NOT found!");
-    //gust
+      
+    //gust  Disabled to help speed 
 //    bT = line.indexOf ("\"gust\":");
 //    if (bT > 0)
 //    {
@@ -658,17 +674,16 @@ void getWeather ()
       wind_speed = sval.toInt();
     }
     else
-      Serial.println ("windspeed NOT found 2!");
-    // timezone offset
-     bT = line.indexOf ("\"timezone\":");
-    if (bT > 0)
-    {
-      int tz;
-      bT2 = line.indexOf (",\"", bT + 11);
-      sval = line.substring (bT + 11, bT2);
-      tz = sval.toInt()/3600;
-    }
-    else
+     Serial.println ("windspeed NOT found 2!");
+     bT = line.indexOf ("\"timezone\":");  // Timezone offset
+     if (bT > 0)
+     {
+       int tz;
+       bT2 = line.indexOf (",\"", bT + 11);
+       sval = line.substring (bT + 11, bT2);
+       tz = sval.toInt()/3600;
+     }
+     else
       Serial.println ("timezone offset NOT found!");
               
     //wind direction
@@ -716,9 +731,9 @@ void getWeather ()
       Serial.println ("Windspeed NOT found 3!");    
       wind_direction = "";
     } 
-  }//connected
-  
+  }
 }
+// End of Get Weather
 
 #include "TinyIcons.h"
 #include "WeatherIcons.h"
@@ -851,8 +866,8 @@ void draw_weather ()
 
   // Clear the top line
 //GQGQ  TFDrawText (&display, String("                   "), tmp_x, tmp_y, cc_dgr);
-  
-  if (tempM == -10000 || humiM == -10000 || presM == -10000)
+
+  if (tempM == -10000 && humiM == -10000 && presM == -10000)
   {
     //TFDrawText (&display, String("NO WEATHER DATA"), 1, 1, cc_dgr);
     Serial.println ("No weather data available");
@@ -861,9 +876,10 @@ void draw_weather ()
   
     //-temperature
     int lcc = cc_red;
-    if (*u_metric == 'Y')
+    char tmp_Metric;
+    if (String (c_vars[EV_METRIC]) == "Y")
     {
-      
+      tmp_Metric = 'C';
         lcc = cc_red;
       if (tempM < 30)
         lcc = cc_org;
@@ -880,6 +896,7 @@ void draw_weather ()
     }
     else
     {
+      tmp_Metric = 'F';
       //F
       if (tempM < 79)
         lcc = cc_grn;
@@ -889,7 +906,7 @@ void draw_weather ()
         lcc = cc_wht;
     }
 
-    String lstr = String (tempM) + String((*u_metric=='Y')?"C":"F");
+    String lstr = String (tempM) + String(tmp_Metric);
     
     //Padding Temp with spaces to keep position the same 
     switch (lstr.length ()) {
@@ -1175,7 +1192,7 @@ void web_server ()
       if (pidx2 > 0)
       {
         String  location = urldecode ( httprq.substring(pidx + 8, pidx2).c_str() );
-        strncpy(c_vars[EV_GEOLOC], location.c_str(), LVARS*3 );
+        strncpy(c_vars[EV_GEOLOC], location.c_str(), LVARS*3);
         getWeather ();
         draw_weather_conditions ();
         svf = 1;
@@ -1231,6 +1248,22 @@ void web_server ()
       httprsp += "<strong>daylight: off</strong><br>";
       svf = 1;
     }
+    else if (httprq.indexOf ("GET /metric/on ") != -1)
+    {
+      strcpy (c_vars[EV_METRIC], "Y");
+      httprsp += "<strong>metric: on</strong><br>";
+      getWeather ();
+      draw_weather_conditions ();
+      svf = 1;
+    }
+    else if (httprq.indexOf ("GET /metric/off ") != -1)
+    {
+      strcpy (c_vars[EV_METRIC], "N");
+      httprsp += "<strong>metric: off</strong><br>";
+      getWeather ();
+      draw_weather_conditions ();
+      svf = 1;
+    }
     else if ((pidx = httprq.indexOf ("GET /brightness/")) != -1)
     {
       int pidx2 = httprq.indexOf (" ", pidx + 16);
@@ -1262,6 +1295,7 @@ void web_server ()
     {
       strcpy (c_vars[EV_WANI], "Y");
       httprsp += "<strong>Weather Animation: on</strong><br>";
+      TFDrawText (&display,"        ", wtext_x, wtext_y, 0);
       getWeather ();
       draw_weather_conditions ();
       svf = 1;
@@ -1303,6 +1337,8 @@ void web_server ()
     httprsp += "<a href='/daylight/off'>Daylight Savings off</a><br><br>";
     httprsp += "<a href='/military/on'>Military Time on</a><br>";
     httprsp += "<a href='/military/off'>Military Time off</a><br><br>";
+    httprsp += "<a href='/metric/on'>Metric System</a><br>";
+    httprsp += "<a href='/metric/off'>Imperial System</a><br><br>";
     httprsp += "<a href='/weather_animation/on'>Weather Animation on</a><br>";
     httprsp += "<a href='/weather_animation/off'>Weather Animation off</a><br><br>";
     
@@ -1345,6 +1381,7 @@ void web_server ()
     httprsp += "Current Configuration<br>";
     httprsp += "Daylight: " + String (c_vars[EV_DST]) + "<br>";
     httprsp += "Military: " + String (c_vars[EV_24H]) + "<br>";
+    httprsp += "Metric: " + String (c_vars[EV_METRIC]) + "<br>";
     httprsp += "Timezone: " + String (c_vars[EV_TZ]) + "<br>";
     httprsp += "Weather Animation: " + String (c_vars[EV_WANI]) + "<br>";
     
@@ -1407,11 +1444,9 @@ void set_digit_color ()
     digit2.SetColor (cc_time);
     digit3.SetColor (cc_time);
     digit4.SetColor (cc_time);
-    //If time is less than 10 or greater than 12 o'clock don't show leading zero
+    //If time is less than 10 or greater than 12 and less than 22 o'clock don't show leading zero
     //FYI hh is military time even when set to no
-    Serial.print ("hh:");
-    Serial.println (hh);
-    if (String (c_vars[EV_24H]) == "N" && ( (hh > 12 && hh < 22) ))
+    if (String (c_vars[EV_24H]) == "N" && ( (hh < 10 || (hh > 12 && hh < 22) ) ) )
      digit5.SetColor (cc_blk);
     else
      digit5.SetColor (cc_time);
