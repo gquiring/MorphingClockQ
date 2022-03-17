@@ -18,7 +18,6 @@ library/NTPCLientlib/src/NTClientlib.h
 #define DEFAULT_DST_ZONE        DST_ZONE_USA
 
 Removed day/night mode
-Changed Startup screen to show timezone
 Changed some RGB colors and made default colors for each area (Wind, Weather Text, Clock, Date)
 Changed Tiny font for number 1.  It looked weird with straight line always right justified
 Removed leading zero from date display
@@ -32,7 +31,8 @@ Added Reset Config File to web options.  Most likely for developer use only.  It
 Added urldecode function to remove %20's from the web entries
 Added day of week to the date line
 Wind and humidity will be alternately displayed every 10 seconds
-
+Created Wifi Connection function.  It will try config file first and then params.h for SSID and Password
+Web logic was broken for changing SSID and Password, it never checked to see if it could connect before saving the settings
 
 Required to compile:
 AdaFruit v1.6.1
@@ -388,14 +388,38 @@ void init_config_vars ()
       strcpy (c_vars[EV_24H], military);
       strcpy (c_vars[EV_METRIC], u_metric);
       strcpy (c_vars[EV_DATEFMT], date_fmt);
-//GQGQ      strcpy (c_vars[EV_OWMK], apiKey.c_str());
       strcpy (c_vars[EV_OWMK], apiKey);
-//GQGQ      strcpy (c_vars[EV_GEOLOC], location.c_str());
       strcpy (c_vars[EV_GEOLOC], location);
       strcpy (c_vars[EV_DST], dst_sav);
       strcpy (c_vars[EV_WANI], w_animation);
 }
 
+//Wifi Connection
+int connect_wifi (String n_wifi, String n_pass) 
+{
+  int c_cnt = 0;
+  Serial.print ("Trying WiFi Connect:");
+  Serial.println (n_wifi);
+  
+  WiFi.begin (n_wifi, n_pass);
+  WiFi.mode(WIFI_STA);
+  while (WiFi.status () != WL_CONNECTED)
+  {
+    delay (500);
+    Serial.print(".");
+    c_cnt++;
+    if (c_cnt > 50) {
+      Serial.println ("Wifi Connect Failed");
+      return 1;
+    }
+  }
+  Serial.println ("success!");
+  Serial.print ("IP Address is: ");
+  Serial.println (WiFi.localIP ());  //
+  return 0;
+
+}
+  
 void setup ()
 {  
   Serial.begin (9600);
@@ -411,46 +435,45 @@ void setup ()
   //
   TFDrawText (&display, String ("  MORPH CLOCK  "), 0, 1, cc_blu);
   TFDrawText (&display, String ("  STARTING UP  "), 0, 10, cc_blu);
-  //connect to wifi network
-  Serial.println ("");
-  Serial.print ("Connecting");
-  
-  WiFi.begin (wifi_ssid, wifi_pass);
-  WiFi.mode(WIFI_STA);
-  while (WiFi.status () != WL_CONNECTED)
-  {
-    delay (500);
-    Serial.print(".");
-  }
-  Serial.println ("success!");
-  Serial.print ("IP Address is: ");
-  Serial.println (WiFi.localIP ());  //
- 
-  TFDrawText (&display, String("WIFI CONNECTED "), 3, 10, cc_grn);
-  TFDrawText (&display, String(WiFi.localIP().toString()), 4, 17, cc_grn);
-  
-  String lstr = String ("TIMEZONE:") + String (timezone);
-  TFDrawText (&display, lstr, 4, 24, cc_cyan);
-  
-  delay (3000);
-  //
-  
+
+  // Read the config file
   if (SPIFFS.begin ())
   {
     Serial.println ("SPIFFS Initialize....ok");
     if (!vars_read ())
     {
-      init_config_vars ();
-      show_config_vars ();
+      init_config_vars ();  //Copy from params.h to EV array
     }
   }
   else
   {
     Serial.println ("SPIFFS Initialization...failed");
   }
+
+   String lstr = String ("TIMEZONE:") + String (EV_TZ);
+   TFDrawText (&display, lstr, 4, 24, cc_cyan);
    
    show_config_vars ();
-   
+  
+  
+  //connect to wifi network
+
+  if ( connect_wifi(c_vars[EV_SSID],c_vars[EV_PASS]) == 1) {  // Try settings in config file
+    TFDrawText (&display, String("WIFI FAILED CONFIG"), 1, 10, cc_grn);
+    if (connect_wifi(wifi_ssid,wifi_pass) == 1) {  // Try settings in params.h
+        Serial.println ("Cannot connect to anything, RESTART ESP");
+        TFDrawText (&display, String ("WIFI FAILED PARAMS.H"), 1, 10, cc_grn);
+        delay(1000);
+        ESP.restart(); // Restart the ESP, cannot connect to Wifi
+    }
+  }
+      
+  TFDrawText (&display, String("WIFI CONNECTED "), 3, 10, cc_grn);
+  TFDrawText (&display, String(WiFi.localIP().toString()), 4, 17, cc_grn);
+  
+
+//  delay (3000);  Why wait?
+ 
    getWeather ();
    httpsvr.begin (); // Start the HTTP Server
 
@@ -517,8 +540,8 @@ void getWeather ()
     Serial.println ("connected."); 
     // Make a HTTP request: 
     client.print ("GET /data/2.5/weather?"); 
-    client.print ("q="+ String(c_vars[EV_GEOLOC]));      //GQGQ fixed reference to use config file
-    client.print ("&appid="+ String(c_vars[EV_OWMK]));   //GQGQ fixed reference to use config file
+    client.print ("q="+ String(c_vars[EV_GEOLOC]));
+    client.print ("&appid="+ String(c_vars[EV_OWMK]));
     client.print ("&cnt=1"); 
     (*u_metric=='Y')?client.println ("&units=metric"):client.println ("&units=imperial");
     client.println ("Host: api.openweathermap.org"); 
@@ -539,16 +562,11 @@ void getWeather ()
     Serial.println ("Weather:unable to retrieve data");
   else
   {
-    Serial.print ("weather:"); 
-    //Serial.println (line); 
-    //weather conditions - "main":"Clear",
     bT = line.indexOf ("\"icon\":\"");
     if (bT > 0)
     {
       bT2 = line.indexOf ("\"", bT + 8);
       sval = line.substring (bT + 8, bT2);
-      Serial.print ("cond ");
-      Serial.println (sval);
       //0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow
       if (sval.equals("01d"))
         condM = 1; //sunny
@@ -595,8 +613,6 @@ void getWeather ()
     {
       bT2 = line.indexOf (",\"", bT + 7);
       sval = line.substring (bT + 7, bT2);
-      Serial.print ("temp: ");
-      Serial.println (sval);
       tempM = sval.toInt ();
     }
     else
@@ -609,8 +625,6 @@ void getWeather ()
     {
       bT2 = line.indexOf (",\"", bT + 11);
       sval = line.substring (bT + 11, bT2);
-      Serial.print ("press ");
-      Serial.println (sval);
       presM = sval.toInt();
     }
     else
@@ -621,24 +635,23 @@ void getWeather ()
     {
       bT2 = line.indexOf (",\"", bT + 11);
       sval = line.substring (bT + 11, bT2);
-      Serial.print ("humi ");
-      Serial.println (sval);
       humiM = sval.toInt();
     }
     else
       Serial.println ("humidity NOT found!");
     //gust
-    bT = line.indexOf ("\"gust\":");
-    if (bT > 0)
-    {
-      bT2 = line.indexOf (",\"", bT + 7);
-      sval = line.substring (bT + 7, bT2);
-      gust = sval.toInt();
-    }
-    else
-    {
-      gust = 0;
-    }   
+//    bT = line.indexOf ("\"gust\":");
+//    if (bT > 0)
+//    {
+//      bT2 = line.indexOf (",\"", bT + 7);
+//      sval = line.substring (bT + 7, bT2);
+//      gust = sval.toInt();
+//    }
+//    else
+//    {
+//      gust = 0;
+//    }   
+
   //wind speed
     bT = line.indexOf ("\"speed\":");
     if (bT > 0)
@@ -659,7 +672,7 @@ void getWeather ()
       tz = sval.toInt()/3600;
     }
     else
-      Serial.println ("temp NOT found!");
+      Serial.println ("timezone offset NOT found!");
               
     //wind direction
     bT = line.indexOf ("\"deg\":");
@@ -838,14 +851,13 @@ switch (condM)
 void draw_weather ()
 {
   int value = 0;
-  xo = tmp_x; yo = tmp_y; // temperature position
 
   // Clear the top line
-  TFDrawText (&display, String("                   "), xo, yo, cc_dgr);
+//GQGQ  TFDrawText (&display, String("                   "), tmp_x, tmp_y, cc_dgr);
   
   if (tempM == -10000 || humiM == -10000 || presM == -10000)
   {
-    //TFDrawText (&display, String("NO WEATHER DATA"), xo, yo, cc_dgr);
+    //TFDrawText (&display, String("NO WEATHER DATA"), 1, 1, cc_dgr);
     Serial.println ("No weather data available");
   }
   else {
@@ -892,7 +904,7 @@ void draw_weather ()
          break;      
     }    
  
-    TFDrawText (&display, lstr, xo, yo, lcc); // draw temperature
+    TFDrawText (&display, lstr, tmp_x, tmp_y, lcc); // draw temperature
     
     //weather conditions
     //-humidity
@@ -926,15 +938,15 @@ void draw_weather ()
         wind_lstr = String (wind_direction) + String (wind_speed);
         switch (wind_lstr.length ()) {     //We have to pad the string to exactly 4 characters
         case 2:
-         wind_lstr = String ("  ") + String (wind_lstr);
+         wind_lstr = String (wind_lstr) + String ("  ");
          break;
         case 3:
-         wind_lstr = String (" ") + String (wind_lstr);
+         wind_lstr = String (wind_lstr) + String (" ");
          break;
         }      
       }  
       else
-        wind_lstr = String ("CALM ");   
+        wind_lstr = String ("CALM");   
         
       wind_humi = 1;  //Reset switch for toggling wind or humidity display
       TFDrawText (&display,wind_lstr, wind_x, wind_y, cc_wind);
@@ -1194,11 +1206,19 @@ void web_server ()
       String ssid = httprq.substring (pidx + 6, pidx2);
       pidx = httprq.indexOf (" HTTP/", pidx2);
       String pass = httprq.substring (pidx2 + 6, pidx);
-      //
-      strncpy(c_vars[EV_SSID], ssid.c_str(), LVARS * 2);
-      strncpy(c_vars[EV_PASS], pass.c_str(), LVARS * 2);
-      svf = 1;
-      rst = 1;
+      if ( connect_wifi(ssid.c_str(),pass.c_str() ) == 0 ) {
+        strncpy(c_vars[EV_SSID], ssid.c_str(), LVARS * 2);
+        strncpy(c_vars[EV_PASS], pass.c_str(), LVARS * 2);
+        svf = 1;
+     //   rst = 1;
+      }
+      else
+      {
+        Serial.println ("Wifi Connect failed, will try prior SSID and Password");
+        if ( connect_wifi(c_vars[EV_SSID],c_vars[EV_PASS] ) == 1 )
+          ESP.restart();  //Give up reboot
+      } 
+      
     }
     else if (httprq.indexOf ("GET /daylight/on ") != -1)
     {
@@ -1301,7 +1321,7 @@ void web_server ()
     //openweathermap.org
     httprsp += "<br>openweathermap.org API key<br>";
     httprsp += "<form action='/owm/'>" \
-      "http://<input type='text' name='owmkey' value='" + String(c_vars[EV_OWMK]) +           "'>(hex string)<br>" \
+      "http://<input type='text' size=\"40\" name='owmkey' value='" + String(c_vars[EV_OWMK]) + "'>(hex string)<br>" \
       "<input type='submit' value='set OWM key'></form><br>";
 
     //geo location
