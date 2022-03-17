@@ -10,13 +10,17 @@ I found the issue with daylight savings time not working for USA locations.  It 
 
 Added option to display weather text ie - Cloudy instead of using icons, I found the icons confusing to decipher.  It's on toggle, you can choose what you like.
 
+Wind and humidity will be alternately displayed every 10 seconds.
+
+Added day of week to the dateline.  Right now it's hardcoded for Sun being the first day of week.
+
 Replaced 0 wind with CALM display.
+
+Leading zero removed from the date display.
 
 Modifed the Tiny font for the 1 digit.  It was a straight line down and looked weird.
 
-Fixed the config file getting corrupted.  It was the declarations for the location and apikey. The are now char arrays. 
-
-Leading zero removed from the date display.
+Fixed the config file getting corrupted. 
 
 Modifed the NTP code to actually compile, the version I had refused to compile with any version of NTPClientLib I tried
 
@@ -24,6 +28,6 @@ Added more configuration options to the web interface.
 
 Added urldecode function to remove the special characters from web entries.  They were being written to the config file which caused issues.
 
-Added day of week to the dateline.  Right now it's hardcoded for Sun being the first day of week.
+Fixed changing SSID and Password on the web interface.
 
-Wind and humidity will be alternately displayed every 10 seconds.
+
