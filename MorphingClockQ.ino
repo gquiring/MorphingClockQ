@@ -33,6 +33,8 @@ Wind and humidity will be alternately displayed every 10 seconds
 Created Wifi Connection function.  It will try config file first and then params.h for SSID and Password
 Web logic was broken for changing SSID and Password, it never checked to see if it could connect before saving the settings
 Added Metric/Imperial options to the web interface
+Added brightness option to config file
+Added Color Palettes to web and config file
 
 =====================================================================
 ===  INSTALLATION INSTRUCTIONS  ===
@@ -131,7 +133,7 @@ const char ntpsvr[]   = "time.google.com";
 
 
   byte day_bright = 70; //sets daytime brightness; 70 is default. values higher than this may not work.
-  byte dim_bright = 25; // sets brightness for partly dimmed mode
+  byte dim_bright = 20; // sets brightness for partly dimmed mode
   byte nm_bright = 25; // sets brightness for night mode
 
 //  byte dim_start = 19; // sets time (24h) for display to dim partly. Ends when night mode starts
@@ -237,20 +239,9 @@ String humi_lstr = "   ";
 int wind_humi;
 
 WiFiServer httpsvr (80); //Initialize the server on Port 80
-unsigned char dbri = 255;
-
-
-//#ifdef ESP8266
-// ISR for display refresh
-void display_updater ()
-{
-   display.display (day_bright); //set brightness for day
-}
-
-//#endif
 
 //settings
-#define NVARS 12
+#define NVARS 13
 #define LVARS 40
 char c_vars [NVARS][LVARS];
 typedef enum e_vars {
@@ -265,15 +256,14 @@ typedef enum e_vars {
   EV_DST,
   EV_OTA,
   EV_WANI,
-  EV_PALET
+  EV_PALET,
+  EV_BRIGHT
 };
 
 // Color palette 
 void select_palette() {
     int x;
     x = atoi(c_vars[EV_PALET]);
-    Serial.print ("X:");
-    Serial.println (x);
   
     switch (x) {
     case 1:
@@ -317,6 +307,7 @@ void select_palette() {
       cc_wind = cc_ppl;
       cc_date = cc_cyan;
       cc_wtext = cc_ylw;
+      break;
     default:
       cc_time = cc_cyan;
       cc_wind = cc_ylw;
@@ -325,6 +316,20 @@ void select_palette() {
       break;
   }
 }
+
+//#ifdef ESP8266
+// ISR for display refresh
+void display_updater ()
+{
+   int x;
+   x = atoi(c_vars[EV_BRIGHT]);
+   if (x > 70 or x < 0)
+     x = 70;
+     
+   display.display (x); //set brightness
+}
+
+//#endif
 
 bool toBool (String s)
 {
@@ -446,6 +451,8 @@ void show_config_vars ()
   Serial.println (c_vars[EV_WANI]);
   Serial.print ("Color Palette=");
   Serial.println (c_vars[EV_PALET]);
+  Serial.print ("Brightness=");
+  Serial.println (c_vars[EV_BRIGHT]);
 }
 
 //If the config file is not setup copy from param.h
@@ -462,6 +469,7 @@ void init_config_vars ()
       strcpy (c_vars[EV_DST], dst_sav);
       strcpy (c_vars[EV_WANI], w_animation);
       strcpy (c_vars[EV_PALET], c_palet);
+      strcpy (c_vars[EV_BRIGHT], brightness);
 }
 
 //Wifi Connection
@@ -533,8 +541,7 @@ void setup ()
     if (connect_wifi(wifi_ssid,wifi_pass) == 1) {  // Try settings in params.h
         Serial.println ("Cannot connect to anything, RESTART ESP");
         TFDrawText (&display, String ("WIFI FAILED PARAMS.H"), 1, 10, cc_grn);
-        delay(1000);
-        ESP.restart(); // Restart the ESP, cannot connect to Wifi
+        resetclock();
     }
   }
       
@@ -1344,8 +1351,10 @@ void web_server ()
       if (pidx2 != -1)
       {
         String bri = httprq.substring (pidx + 16, pidx2);
-        dbri = (unsigned char)bri.toInt ();
+        strcpy (c_vars[EV_BRIGHT], bri.c_str());
+        display_updater();
         ntpsync = 1; //force full redraw
+        svf = 1;
       }
     }
     else if ((pidx = httprq.indexOf ("GET /timezone/")) != -1)
@@ -1417,7 +1426,7 @@ void web_server ()
     }
       
     //
-    httprsp += "<br>MORPH CLOCK<br>";
+    httprsp += "<br>MORPH CLOCK CONFIG<br>";
     httprsp += "<br>Use the following configuration links<br>";
     httprsp += "<a href='/daylight/on'>Daylight Savings on</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/daylight/off'>Daylight Savings off</a><br><br>";
@@ -1432,17 +1441,23 @@ void web_server ()
     httprsp += "<a href='/timezone/-6'>Central USA</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/timezone/-7'>Mountain USA</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/timezone/-8'>Pacific USA</a><br>";
-    httprsp += "use /timezone/x for timezone 'x'<br>";
+    httprsp += "use /timezone/x for timezone 'x'<br><br>";
 
-    httprsp += "use /colorpalet/x for color 'x'<br>";
+    httprsp += "<a href='/colorpalet/1'>Clock Color Cyan</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/colorpalet/2'>Clock Color Red</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/colorpalet/3'>Clock Color Blue</a>&nbsp &nbsp &nbsp<br>";
+    httprsp += "<a href='/colorpalet/4'>Clock Color Yellow</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/colorpalet/5'>Clock Color Bright Blue</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/colorpalet/6'>Clock Color Orange</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/colorpalet/7'>Clock Color Green</a>&nbsp &nbsp &nbsp<br>";
     
     httprsp += "<br><a href='/brightness/0'>brightness 0 (turn off display)</a><br>";
-    httprsp += "use /brightness/x for display brightness 'x' from 0 (darkest) to 255 (brightest)<br>";
+    httprsp += "use /brightness/x for display brightness 'x' from 0 (darkest) to 70 (brightest)<br>";
     
     //openweathermap.org
     httprsp += "<br>openweathermap.org API key<br>";
     httprsp += "<form action='/owm/'>" \
-      "http://<input type='text' size=\"40\" name='owmkey' value='" + String(c_vars[EV_OWMK]) + "'>(hex string)<br>" \
+      "http://<input type='text' size=\"35\" name='owmkey' value='" + String(c_vars[EV_OWMK]) + "'>(hex string)<br>" \
       "<input type='submit' value='set OWM key'></form><br>";
 
     //geo location
@@ -1464,7 +1479,7 @@ void web_server ()
       "<input type='submit' value='set wifi'></form><br>";
       
     //Reset config file  (You probably will never need to but it's really handy for debugging)
-    httprsp += "<a href='/reset_config_file'>Reset Config file to defaults</a><br>";
+    httprsp += "<a href='/reset_config_file'>Reset Config file to defaults</a><br><br>";
     
     httprsp += "Current Configuration<br>";
     httprsp += "Daylight: " + String (c_vars[EV_DST]) + "<br>";
@@ -1473,6 +1488,7 @@ void web_server ()
     httprsp += "Timezone: " + String (c_vars[EV_TZ]) + "<br>";
     httprsp += "Weather Animation: " + String (c_vars[EV_WANI]) + "<br>";
     httprsp += "Color palette: " + String (c_vars[EV_PALET]) + "<br>";
+    httprsp += "Brightness: " + String (c_vars[EV_BRIGHT]) + "<br>";
     httprsp += "<br><a href='/'>home</a><br>";
     httprsp += "<br>" \
       "<script language='javascript'>" \
@@ -1505,14 +1521,13 @@ void web_server ()
 
     if (rst)
       resetclock();
-    //turn off wifi if in ap mode with date&time
   }
 }
 //
 //Web server end
 //
 
-//Restart Clock due to changes from Web
+//Restart Clock 
 void resetclock ()
 {
   display.fillScreen (0);
