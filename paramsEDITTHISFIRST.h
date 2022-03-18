@@ -19,3 +19,5 @@ char location[] = ""; //e.g. "Paris,FR"
 char dst_sav[6] = "true";  
 // Weather animation graphics or text? Y/N
 char w_animation[3] = "N";
+// Color palette
+char c_palet[3] = "1";
