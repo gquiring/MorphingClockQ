@@ -32,12 +32,34 @@ Added day of week to the date line
 Wind and humidity will be alternately displayed every 10 seconds
 Created Wifi Connection function.  It will try config file first and then params.h for SSID and Password
 Web logic was broken for changing SSID and Password, it never checked to see if it could connect before saving the settings
+Added Metric/Imperial options to the web interface
 
-Required to compile:
-AdaFruit v1.6.1
-PxMatrix by Dom B v1.3.0
-Wifi Manager by TZ .15.0
-From Board Manager select ESP8266 2.7.4 anything 3.0 or greater won't compile
+=====================================================================
+===  INSTALLATION INSTRUCTIONS  ===
+=====================================================================
+Required libraries to compile:
+AdaFruit GFX Library v1.10.4 (Install all dependancies)
+PxMatrix LED Matrix Library by Dominic Buchstaller v1.3.0
+Wifi Manager by TZAPU .16.0 (listed as Tablatronix)
+NTPClientLib by German Martin 3.0.2 Beta
+Timelib by Paul Stoffregen 1.6.1
+Arduino JSON 5.13.5 (Do not install 6.x)
+ESP Async UDP Not in the IDE library use the link below
+https://github.com/me-no-dev/ESPAsyncUDP
+
+From the File, Preferences menu, install this additional Link in the board
+Manager URL option:
+http://arduino.esp8266.com/stable/package_esp8266com_index.json
+
+From the Tools menu, Board Manager select ESP8266 2.7.4 anything 3.0 or greater won't compile
+
+To fix the Daylight Savings option for USA you must use an external editor
+You need to edit this file: (located in your Arduino library directory)
+library/NTPCLientlib/src/NTClientlib.h
+#define DEFAULT_DST_ZONE        DST_ZONE_USA   //It's default is EU
+======================================================================
+
+
 
 
 provided 'AS IS', use at your own risk
@@ -142,43 +164,32 @@ const char ntpsvr[]   = "time.google.com";
 
 // some other colors
 // R G B
-  int cc_blk = display.color565 (0, 0, 0);     // black
-  int cc_wht = display.color565 (25, 25, 25);  // white
-  int cc_red = display.color565 (50, 0, 0);    // red
-//  int cc_org = display.color565 (25, 16, 0);   // orange
-  int cc_org = display.color565 (25, 10, 0);   // orange
-  int cc_grn = display.color565 (0, 50, 0);    // green
-//gq  int cc_blu = display.color565 (0, 13, 25);   // blue
-  int cc_blu = display.color565 (0, 0, 150);   // blue
-  int cc_bblu = display.color565 (0, 128, 255);    // bright blue
-  int cc_ylw = display.color565 (45, 45, 0);   // yellow
-  int cc_gry = display.color565 (10, 10, 10);  // gray
-  int cc_dgr = display.color565 (3, 3, 3);     // dark grey
-  int cc_cyan = display.color565 (0, 25, 25);  // cyan
-  int cc_ppl = display.color565 (25, 0, 25);   // purple
-
-  // alternate, brighter text colors. Best used with the alternate brighter icons
-  /*
   int cc_blk = display.color565 (0, 0, 0);        // black
-  int cc_wht = display.color565 (255, 255, 255);  // white
-  int cc_red = display.color565 (255, 0, 0);      // red
-  int cc_org = display.color565 (255, 165, 0);    // orange
-  int cc_grn = display.color565 (0, 255, 0);      // green
-  int cc_blu = display.color565 (0, 128, 255);    // blue
-  int cc_ylw = display.color565 (255, 255, 0);    // yellow
-  int cc_gry = display.color565 (128, 128, 128);  // gray
-  int cc_dgr = display.color565 (30, 30, 30);     // dark gray
-  int cc_lblu = display.color565 (0, 255, 255);   // light blue
-  int cc_ppl = display.color565 (255, 0, 255);    // purple
-   */
+  int cc_wht = display.color565 (25, 25, 25);     // white
+  int cc_bwht = display.color565 (255, 255, 255); // bright white
+  int cc_red = display.color565 (50, 0, 0);       // red
+  int cc_bred = display.color565 (255, 0, 0);     // bright red
+  int cc_org = display.color565 (25, 10, 0);      // orange
+  int cc_borg = display.color565 (255, 165, 0);   // bright orange
+  int cc_grn = display.color565 (0, 50, 0);       // green
+  int cc_bgrn = display.color565 (0, 255, 0);     // bright green
+  int cc_blu = display.color565 (0, 0, 150);      // blue
+  int cc_bblu = display.color565 (0, 128, 255);   // bright blue
+  int cc_ylw = display.color565 (45, 45, 0);      // yellow
+  int cc_bylw = display.color565 (255, 255, 0);   // bright yellow
+  int cc_gry = display.color565 (10, 10, 10);     // gray
+  int cc_bgry = display.color565 (128, 128, 128); // bright gray
+  int cc_dgr = display.color565 (3, 3, 3);        // dark grey
+  int cc_cyan = display.color565 (0, 25, 25);     // cyan
+  int cc_bcyan = display.color565 (0, 255, 255);  // bright cyan
+  int cc_ppl = display.color565 (25, 0, 25);      // purple
+  int cc_bppl = display.color565 (255, 0, 255);   // bright purple
 
-
-// Default colors
-// Temperature color is set based on temperature for example red is for hot
-int cc_time = cc_cyan;  //default color for time
-int cc_wind = cc_ylw;   //default color for wind
-int cc_date = cc_grn;   //default color for date
-int cc_wtext = cc_wht;  //default color for weather description
+// Colors for time, wind, date and weather text  (Temperature color varies based on actual temp)
+int cc_time;
+int cc_wind;
+int cc_date;
+int cc_wtext;
 
 //===OTHER SETTINGS===
 int ani_speed = 500; // sets animation speed
@@ -239,7 +250,7 @@ void display_updater ()
 //#endif
 
 //settings
-#define NVARS 11
+#define NVARS 12
 #define LVARS 40
 char c_vars [NVARS][LVARS];
 typedef enum e_vars {
@@ -253,8 +264,67 @@ typedef enum e_vars {
   EV_GEOLOC,
   EV_DST,
   EV_OTA,
-  EV_WANI
+  EV_WANI,
+  EV_PALET
 };
+
+// Color palette 
+void select_palette() {
+    int x;
+    x = atoi(c_vars[EV_PALET]);
+    Serial.print ("X:");
+    Serial.println (x);
+  
+    switch (x) {
+    case 1:
+      cc_time = cc_cyan;
+      cc_wind = cc_ylw;
+      cc_date = cc_grn;
+      cc_wtext = cc_wht;
+      break;
+    case 2:
+      cc_time = cc_red;
+      cc_wind = cc_ylw;
+      cc_date = cc_blu;
+      cc_wtext = cc_grn;
+      break;
+    case 3:
+      cc_time = cc_blu;
+      cc_wind = cc_grn;
+      cc_date = cc_ylw;
+      cc_wtext = cc_wht;
+      break;
+    case 4:
+      cc_time = cc_ylw;
+      cc_wind = cc_cyan;
+      cc_date = cc_blu;
+      cc_wtext = cc_grn;
+      break;
+    case 5:
+       cc_time = cc_bblu;
+       cc_wind = cc_wht;
+       cc_date = cc_ylw;
+       cc_wtext = cc_grn;
+       break;
+    case 6:
+      cc_time = cc_org;
+      cc_wind = cc_wht;
+      cc_date = cc_grn;
+      cc_wtext = cc_ylw;
+      break;
+    case 7:
+      cc_time = cc_grn;
+      cc_wind = cc_ppl;
+      cc_date = cc_cyan;
+      cc_wtext = cc_ylw;
+    default:
+      cc_time = cc_cyan;
+      cc_wind = cc_ylw;
+      cc_date = cc_grn;
+      cc_wtext = cc_wht;
+      break;
+  }
+}
 
 bool toBool (String s)
 {
@@ -374,6 +444,8 @@ void show_config_vars ()
   Serial.println (c_vars[EV_DST]);
   Serial.print ("Weather Animation=");
   Serial.println (c_vars[EV_WANI]);
+  Serial.print ("Color Palette=");
+  Serial.println (c_vars[EV_PALET]);
 }
 
 //If the config file is not setup copy from param.h
@@ -389,6 +461,7 @@ void init_config_vars ()
       strcpy (c_vars[EV_GEOLOC], location);
       strcpy (c_vars[EV_DST], dst_sav);
       strcpy (c_vars[EV_WANI], w_animation);
+      strcpy (c_vars[EV_PALET], c_palet);
 }
 
 //Wifi Connection
@@ -468,7 +541,8 @@ void setup ()
   TFDrawText (&display, String("WIFI CONNECTED "), 3, 10, cc_grn);
   TFDrawText (&display, String(WiFi.localIP().toString()), 4, 17, cc_grn);
   
-
+  select_palette();
+  
 //  delay (3000);  Why wait?
  
    getWeather ();
@@ -969,7 +1043,7 @@ void draw_weather ()
     if ( String (c_vars[EV_WANI]) == "N" ) {
       weather_text_conversion();
       lstr = String (weather_text);
-      TFDrawText (&display,lstr, wtext_x, wtext_y, cc);
+      TFDrawText (&display,lstr, wtext_x, wtext_y, cc_wtext);
     }  
     else {
       draw_weather_conditions ();
@@ -1280,7 +1354,6 @@ void web_server ()
       if (pidx2 != -1)
       {
         String tz = httprq.substring (pidx + 14, pidx2);
-        //strcpy (timezone, tz.c_str ());
         strcpy (c_vars[EV_TZ], tz.c_str ());
         NTP.begin (ntpsvr, String (c_vars[EV_TZ]).toInt (), toBool(String (c_vars[EV_DST])));
         httprsp += "<strong>timezone:" + tz + "</strong><br>";
@@ -1330,23 +1403,38 @@ void web_server ()
       vars_read ();
       httprsp += "<strong>Config file resetted</strong><br>";
     }
+    else if ((pidx = httprq.indexOf ("GET /colorpalet/")) != -1)
+    {
+      int pidx2 = httprq.indexOf (" ", pidx + 16);
+      if (pidx2 != -1)
+      {
+        String pal = httprq.substring (pidx + 16, pidx2);
+        strcpy (c_vars[EV_PALET], pal.c_str ());
+        httprsp += "<strong>Color Palet:" + pal + "</strong><br>";
+        svf = 1;
+        rst = 1;
+      }
+    }
+      
     //
     httprsp += "<br>MORPH CLOCK<br>";
     httprsp += "<br>Use the following configuration links<br>";
-    httprsp += "<a href='/daylight/on'>Daylight Savings on</a><br>";
+    httprsp += "<a href='/daylight/on'>Daylight Savings on</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/daylight/off'>Daylight Savings off</a><br><br>";
-    httprsp += "<a href='/military/on'>Military Time on</a><br>";
+    httprsp += "<a href='/military/on'>Military Time on</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/military/off'>Military Time off</a><br><br>";
-    httprsp += "<a href='/metric/on'>Metric System</a><br>";
+    httprsp += "<a href='/metric/on'>Metric System</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/metric/off'>Imperial System</a><br><br>";
-    httprsp += "<a href='/weather_animation/on'>Weather Animation on</a><br>";
+    httprsp += "<a href='/weather_animation/on'>Weather Animation on</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/weather_animation/off'>Weather Animation off</a><br><br>";
     
-    httprsp += "<a href='/timezone/-5'>East Coast, USA</a><br>";
-    httprsp += "<a href='/timezone/-6'>Central, USA</a><br>";
-    httprsp += "<a href='/timezone/-7'>Mountain, USA</a><br>";
-    httprsp += "<a href='/timezone/-8'>Pacific, USA</a><br>";
+    httprsp += "<a href='/timezone/-5'>East Coast USA</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/timezone/-6'>Central USA</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/timezone/-7'>Mountain USA</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/timezone/-8'>Pacific USA</a><br>";
     httprsp += "use /timezone/x for timezone 'x'<br>";
+
+    httprsp += "use /colorpalet/x for color 'x'<br>";
     
     httprsp += "<br><a href='/brightness/0'>brightness 0 (turn off display)</a><br>";
     httprsp += "use /brightness/x for display brightness 'x' from 0 (darkest) to 255 (brightest)<br>";
@@ -1384,7 +1472,7 @@ void web_server ()
     httprsp += "Metric: " + String (c_vars[EV_METRIC]) + "<br>";
     httprsp += "Timezone: " + String (c_vars[EV_TZ]) + "<br>";
     httprsp += "Weather Animation: " + String (c_vars[EV_WANI]) + "<br>";
-    
+    httprsp += "Color palette: " + String (c_vars[EV_PALET]) + "<br>";
     httprsp += "<br><a href='/'>home</a><br>";
     httprsp += "<br>" \
       "<script language='javascript'>" \
@@ -1416,13 +1504,23 @@ void web_server ()
     }
 
     if (rst)
-      ESP.reset();
+      resetclock();
     //turn off wifi if in ap mode with date&time
   }
 }
 //
 //Web server end
 //
+
+//Restart Clock due to changes from Web
+void resetclock ()
+{
+  display.fillScreen (0);
+  TFDrawText (&display, String ("  RESTART  "), 10, 9, cc_blu);
+  TFDrawText (&display, String ("MORPH CLOCK"), 10, 16, cc_blu);
+  delay (2000);
+  ESP.reset();  
+}
 
 void draw_am_pm ()
 {
