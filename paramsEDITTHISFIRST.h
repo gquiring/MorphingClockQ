@@ -21,3 +21,5 @@ char dst_sav[6] = "true";
 char w_animation[3] = "N";
 // Color palette
 char c_palet[3] = "1";
+//Set brightness
+char brightness[4] = "70";
