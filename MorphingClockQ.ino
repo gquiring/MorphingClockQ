@@ -16,6 +16,7 @@ USA Daylight savings time won't work with NTPClientlib, it's default is EU DST, 
 library/NTPCLientlib/src/NTClientlib.h
 #define DEFAULT_DST_ZONE        DST_ZONE_USA
 
+Fixed Morphing for Hour change, it no longer clears the screen and starts over
 Removed day/night mode
 Changed some RGB colors and made default colors for each area (Wind, Weather Text, Clock, Date)
 Changed Tiny font for number 1.  It looked weird with straight line always right justified
@@ -35,10 +36,12 @@ Web logic was broken for changing SSID and Password, it never checked to see if 
 Added Metric/Imperial options to the web interface
 Added brightness option to config file
 Added Color Palettes to web and config file
-
+Commented out OTA feature for the web interaface, the code is not excuted anywhere in the routines
 =====================================================================
 ===  INSTALLATION INSTRUCTIONS  ===
 =====================================================================
+copy paramsEDITTHISFIRST.h to params.h
+Edit params.h and fill in your SSID, Password and other settings
 Required libraries to compile:
 AdaFruit GFX Library v1.10.4 (Install all dependancies)
 PxMatrix LED Matrix Library by Dominic Buchstaller v1.3.0
@@ -173,7 +176,7 @@ const char ntpsvr[]   = "time.google.com";
   int cc_bred = display.color565 (255, 0, 0);     // bright red
   int cc_org = display.color565 (25, 10, 0);      // orange
   int cc_borg = display.color565 (255, 165, 0);   // bright orange
-  int cc_grn = display.color565 (0, 50, 0);       // green
+  int cc_grn = display.color565 (0, 45, 0);       // green
   int cc_bgrn = display.color565 (0, 255, 0);     // bright green
   int cc_blu = display.color565 (0, 0, 150);      // blue
   int cc_bblu = display.color565 (0, 128, 255);   // bright blue
@@ -182,7 +185,7 @@ const char ntpsvr[]   = "time.google.com";
   int cc_gry = display.color565 (10, 10, 10);     // gray
   int cc_bgry = display.color565 (128, 128, 128); // bright gray
   int cc_dgr = display.color565 (3, 3, 3);        // dark grey
-  int cc_cyan = display.color565 (0, 25, 25);     // cyan
+  int cc_cyan = display.color565 (0, 30, 30);     // cyan
   int cc_bcyan = display.color565 (0, 255, 255);  // bright cyan
   int cc_ppl = display.color565 (25, 0, 25);      // purple
   int cc_bppl = display.color565 (255, 0, 255);   // bright purple
@@ -455,7 +458,7 @@ void show_config_vars ()
   Serial.println (c_vars[EV_BRIGHT]);
 }
 
-//If the config file is not setup copy from param.h
+//If the config file is not setup copy from params.h
 void init_config_vars ()
 {
       strcpy (c_vars[EV_SSID], wifi_ssid); 
@@ -979,9 +982,9 @@ void draw_weather ()
     {
       tmp_Metric = 'F';
       //F
-      if (tempM < 79)
+      if (tempM < 90)
         lcc = cc_grn;
-      if (tempM < 64)
+      if (tempM < 75)
         lcc = cc_blu;
       if (tempM < 43)
         lcc = cc_wht;
@@ -1465,12 +1468,17 @@ void web_server ()
     httprsp += "<form action='/geoloc/'>" \
       "http://<input type='text' name='geoloc' value='" + String(c_vars[EV_GEOLOC]) + "'>(e.g.: New York City,NY)<br>" \
       "<input type='submit' value='set Location'></form><br>";
- 
+
+//GQ
+//I have no idea what someone intended for this to do?
+//EV_OTA is not accessed in the code for any routines
+//I left the vars in place but will comment out in the web interface since it does nothing
+//
     //OTA
-    httprsp += "<br>OTA update configuration (every minute)<br>";
-    httprsp += "<form action='/ota/'>" \
-      "http://<input type='text' name='otaloc' value='" + String(c_vars[EV_OTA]) + "'>(ip address:port/filename)<br>" \
-      "<input type='submit' value='set OTA location'></form><br>";
+//    httprsp += "<br>OTA update configuration (every minute)<br>";
+//    httprsp += "<form action='/ota/'>" \
+//      "http://<input type='text' name='otaloc' value='" + String(c_vars[EV_OTA]) + "'>(ip address:port/filename)<br>" \
+//      "<input type='submit' value='set OTA location'></form><br>";
       
     httprsp += "<br>wifi configuration<br>";
     httprsp += "<form action='/wifi/'>" \
@@ -1557,9 +1565,9 @@ void set_digit_color ()
     digit2.SetColor (cc_time);
     digit3.SetColor (cc_time);
     digit4.SetColor (cc_time);
-    //If time is less than 10 or greater than 12 and less than 22 o'clock don't show leading zero
-    //FYI hh is military time even when set to no
-    if (String (c_vars[EV_24H]) == "N" && ( (hh < 10 || (hh > 12 && hh < 22) ) ) )
+    
+    // Don't print leading zero if not Military
+    if (String (c_vars[EV_24H]) == "N" && hh < 10 )
      digit5.SetColor (cc_blk);
     else
      digit5.SetColor (cc_time);
@@ -1596,7 +1604,8 @@ void loop()
   ss = second (tnow);
   //
 
-    if (ntpsync or (hh != prevhh))
+//GQGQ    if (ntpsync or (hh != prevhh))
+    if (ntpsync)
     {
        
     ntpsync = 0;
@@ -1609,7 +1618,6 @@ void loop()
     
     //clear screen
     display_updater ();
-    set_digit_color ();
     display.fillScreen (0);
     Serial.println ("Display cleared");
     
@@ -1625,7 +1633,7 @@ void loop()
     if (hh == 0 && String (c_vars[EV_24H]) == "N")  // this makes the first hour of the day 12a when military time isn't used.
        hh += 12;
 
-    //
+    set_digit_color ();
 
     digit0.Draw (ss % 10);
     digit1.Draw (ss / 10);
@@ -1642,11 +1650,13 @@ void loop()
       
       int s0 = ss % 10;
       int s1 = ss / 10;
-        if (s0 != digit0.Value ()) digit0.Morph (s0);
-        if (s1 != digit1.Value ()) digit1.Morph (s1);
+      set_digit_color;
+      if (s0 != digit0.Value ()) digit0.Morph (s0);
+      if (s1 != digit1.Value ()) digit1.Morph (s1);
+        
       prevss = ss;
-      //refresh weather at 30sec in the minute
-      if (ss == 30 && ((mm % weather_refresh) == 0)) {
+      //refresh weather at 31sec in the minute
+      if (ss == 31 && ((mm % weather_refresh) == 0)) {
         getWeather ();
       }
       else if ( (ss % 10) == 0) {       // Toggle display every 10 seconds between wind and humidity
@@ -1676,7 +1686,6 @@ void loop()
     if (hh != prevhh)
     {
       display_updater ();
-      set_digit_color ();
       prevhh = hh;
       
       draw_date ();
@@ -1692,7 +1701,13 @@ void loop()
      
       int h0 = hh % 10;
       int h1 = hh / 10;
-      if (h0 != digit4.Value ()) digit4.Morph (h0);
+      set_digit_color ();
+      
+      digit4.Morph (h0);
+      
+      if (String (c_vars[EV_24H]) == "N" && hh < 10 )  //We have to clear leading zero to black
+        digit5.Draw(h1);
+        
       if (h1 != digit5.Value ()) digit5.Morph (h1);
     }//hh changed
 
@@ -1708,6 +1723,6 @@ void loop()
     Serial.println("24h Sync Enabled");
   }
   //
-	delay (0);
+	//delay (0);
   }
 }
