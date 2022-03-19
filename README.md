@@ -32,4 +32,6 @@ Added urldecode function to remove the special characters from web entries.  The
 
 Fixed changing SSID and Password on the web interface.
 
+Added color palette options to the web config.  You can pick from several different palettes.  
+
 
