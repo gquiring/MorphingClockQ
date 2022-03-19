@@ -8,6 +8,8 @@ This version of Hari's Morphing clock is from several remix versions including t
 
 I found the issue with daylight savings time not working for USA locations.  It requires editing the NTPClientLib (more details in the .ino).  
 
+Fixed the morphing problem when the hour changed, it now morphs all the digits, much cooler looking
+
 Added option to display weather text ie - Cloudy instead of using icons, I found the icons confusing to decipher.  It's on toggle, you can choose what you like.
 
 Wind and humidity will be alternately displayed every 10 seconds.
