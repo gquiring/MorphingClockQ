@@ -23,6 +23,7 @@ Changed Tiny font for number 1.  It looked weird with straight line always right
 Removed leading zero from date display
 Changed wind = 0 to display "CALM"
 Add Weather text toggle for text or animation.  I found the animation hard to understand.  Text displays words like Cloudy
+Weather Animation/text toggle can be changed from web and stored to config file
 Fixed inconsistenty with web control variables.  The code was not always referencing the changed variable but the hardcoded
 variables in params.h.  Another words changing the settings on the web had no effect on the clock/weather display.  
 Fixed the config file writing.  location and apiKey were declared as Strings which was corrupting the file write.  No clue why
@@ -34,12 +35,16 @@ Wind and humidity will be alternately displayed every 10 seconds
 Created Wifi Connection function.  It will try config file first and then params.h for SSID and Password
 Web logic was broken for changing SSID and Password, it never checked to see if it could connect before saving the settings
 Added Metric/Imperial options to the web interface
-Added brightness option to config file
+Added brightness option to config file and web interface
 Added Color Palettes to web and config file
-Commented out OTA feature for the web interaface, the code is not excuted anywhere in the routines
+Commented out OTA feature for the web interaface, the code is not excuted anywhere in the routines, not sure what it was for
 =====================================================================
 ===  INSTALLATION INSTRUCTIONS  ===
 =====================================================================
+If you don't want to manually download the libraries I have them all in a zip file
+https://drive.google.com/file/d/1cQjsZGft_tuw0jCCs2JDoIu5awqr7lbc/
+
+
 copy paramsEDITTHISFIRST.h to params.h
 Edit params.h and fill in your SSID, Password and other settings
 Required libraries to compile:
@@ -64,8 +69,21 @@ library/NTPCLientlib/src/NTClientlib.h
 #define DEFAULT_DST_ZONE        DST_ZONE_USA   //It's default is EU
 ======================================================================
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+                                COMPONENTS 
 
+P3 RGB Pixel panel HD Display 64x32 dot Matrix SMD2121 Led Module Indoor Screen Full Color Video Wall 192x96mm Message Board
+https://www.aliexpress.com/item/32728985432.html
 
+MELIFE 3pcs ESP8266 WiFi Development Module CH340 Serial Wireless Module NodeMcu Lua 4M WiFi WLAN Internet New Version Dev Board
+https://www.amazon.com/dp/B09F8GCVC8
+
+ALITOVE 5V 8A 40W AC to DC Adapter Power Supply Converter Transformer 5.5x2.5mm Plug AC 100V~240V Input
+https://www.amazon.com/dp/B078RZBL8X
+
+EDGELEC 120pcs Breadboard Jumper Wires 7.8 inch (7.8CM)
+https://www.amazon.com/dp/B07GD2BWPY
+///////////////////////////////////////////////////////////////////////////////////////////////////
 
 provided 'AS IS', use at your own risk
  */
@@ -139,10 +157,6 @@ const char ntpsvr[]   = "time.google.com";
   byte dim_bright = 20; // sets brightness for partly dimmed mode
   byte nm_bright = 25; // sets brightness for night mode
 
-//  byte dim_start = 19; // sets time (24h) for display to dim partly. Ends when night mode starts
-//  byte nm_start = 23; // start time (24h) for night mode; must be either 22 or 23
-//  byte nm_end = 1; // end time for night mode; must be between 1 and 9
-  
 //=== SEGMENTS ===
 // This section determines the position of the HH:MM ss digits onscreen with format digit#(&display, 0, x_offset, y_offset, irrelevant_color)
 
@@ -608,17 +622,14 @@ int gust = 0;
   
 void getWeather ()
 {
- //GQGQ if (!apiKey.length ())
-//  if (apiKey.length() == 0)
-//  {
-//    Serial.println ("w:missing API KEY for weather data, skipping"); 
-//    return;
-//  }
-  Serial.print ("i:connecting to weather server.. "); 
-  // if you get a connection, report back via serial: 
+ if (!sizeof(apiKey))
+  {
+    Serial.println ("Missing API KEY for weather data, skipping"); 
+    return;
+  }
+  
   if (client.connect (server, 80))
   { 
-    Serial.println ("connected."); 
     // Make a HTTP request: 
     client.print ("GET /data/2.5/weather?"); 
     client.print ("q="+ String(c_vars[EV_GEOLOC]));      // City, Country
@@ -1452,10 +1463,12 @@ void web_server ()
     httprsp += "<a href='/colorpalet/4'>Clock Color Yellow</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/colorpalet/5'>Clock Color Bright Blue</a>&nbsp &nbsp &nbsp";
     httprsp += "<a href='/colorpalet/6'>Clock Color Orange</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/colorpalet/7'>Clock Color Green</a>&nbsp &nbsp &nbsp<br>";
+    httprsp += "<a href='/colorpalet/7'>Clock Color Green</a>&nbsp &nbsp &nbsp<br><br>";
     
-    httprsp += "<br><a href='/brightness/0'>brightness 0 (turn off display)</a><br>";
-    httprsp += "use /brightness/x for display brightness 'x' from 0 (darkest) to 70 (brightest)<br>";
+    httprsp += "<a href='/brightness/70'>Brightness 70</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/brightness/35'>Brightness 35</a>&nbsp &nbsp &nbsp";
+    httprsp += "<a href='/brightness/0'>Turn off display</a><br>";
+    httprsp += "Use /brightness/x for display brightness 'x'<br>";
     
     //openweathermap.org
     httprsp += "<br>openweathermap.org API key<br>";
@@ -1511,7 +1524,7 @@ void web_server ()
       "if(dd<10)dd='0'+dd;" \
       "if(MM<10)MM='0'+MM;" \
       "var yyyy = today.getFullYear();" \
-      "document.write('set date and time to <a href=/datetime/'+yyyy+MM+dd+hh+mm+'>'+yyyy+'.'+MM+'.'+dd+' '+hh+':'+mm+':00 (next minute, disable wifi)</a><br>');" \
+      "document.write('set date and time to <a href=/datetime/'+yyyy+MM+dd+hh+mm+'>'+yyyy+'.'+MM+'.'+dd+' '+hh+':'+mm+':00</a><br>');" \
       "document.write('using current date and time '+today);" \
       "</script>";
     httprsp += "</html>\r\n";
@@ -1604,7 +1617,7 @@ void loop()
   ss = second (tnow);
   //
 
-//GQGQ    if (ntpsync or (hh != prevhh))
+//GQGQ    if (ntpsync or (hh != prevhh))   Fixed morphing bug that required refreshing the screen for hh change 
     if (ntpsync)
     {
        
