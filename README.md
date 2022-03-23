@@ -4,6 +4,8 @@ I made a zip file with all the libraries required for this project on [Google Dr
 
 Visit [OpenWeather](https://openweathermap.org/) to get a free account for your weather API key.  This is mandatory for the weather to work.  
 
+Build instructions are on [Youtube](https://youtu.be/5IvTE6gUA08)
+
 Edit the paramsEDITMEFIRST.h file (which needs to be renamed to params.h).  You must setup your SSID and password.  
 
 Daylight savings time not working for USA locations.  It requires editing the NTPClientLib (more details in the .ino).  
