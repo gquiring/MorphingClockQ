@@ -11,6 +11,8 @@ small seconds by Trenck
 this remix by timz3818 adds am/pm, working night mode (change brightness and colors), auto dissapearing first digit, and lower brightness icons
 
 This remix by Gary Quiring 3/2022
+https://github.com/gquiring/MorphingClockQ
+
 Changed NTP calls, would not compile
 USA Daylight savings time won't work with NTPClientlib, it's default is EU DST, change the line below for USA default
 library/NTPCLientlib/src/NTClientlib.h
@@ -41,6 +43,8 @@ Commented out OTA feature for the web interaface, the code is not excuted anywhe
 =====================================================================
 ===  INSTALLATION INSTRUCTIONS  ===
 =====================================================================
+Youtube: https://youtu.be/5IvTE6gUA08
+
 If you don't want to manually download the libraries I have them all in a zip file
 https://drive.google.com/file/d/1cQjsZGft_tuw0jCCs2JDoIu5awqr7lbc/
 
@@ -1394,6 +1398,7 @@ void web_server ()
       TFDrawText (&display,"        ", wtext_x, wtext_y, 0);
       getWeather ();
       draw_weather_conditions ();
+      ntpsync = 1;
       svf = 1;
     }
     else if (httprq.indexOf ("GET /weather_animation/off ") != -1)
@@ -1402,6 +1407,7 @@ void web_server ()
       httprsp += "<strong>Weather Animation: off</strong><br>";
       getWeather ();
       draw_weather_conditions ();
+      ntpsync = 1;
       svf = 1;
     }
     else if (httprq.indexOf ("GET /military/on ") != -1)
