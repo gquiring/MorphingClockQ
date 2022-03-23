@@ -36,4 +36,3 @@ Modifed the NTP code in the main loop to compile, the version I had refused to c
 
 Credits:
 This version of Hari's Morphing clock is from several remix versions including timz3818. They all did a nice job enhancing this cool clock - Thank you!
-
