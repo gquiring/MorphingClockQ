@@ -616,3 +616,15 @@ int snow4_ico [50] = {
 };
  */
  
+ 
+int *suny_ani[] = {sunny_ico, sunny1_ico, sunny2_ico, sunny1_ico, sunny2_ico};
+int *clod_ani[] = {cloudy_ico, cloudy1_ico, cloudy2_ico, cloudy3_ico, cloudy4_ico, cloudy5_ico, cloudy6_ico, cloudy7_ico, cloudy8_ico, cloudy9_ico};
+int *ovct_ani[] = {ovrcst_ico, ovrcst1_ico, ovrcst2_ico, ovrcst1_ico, ovrcst2_ico};
+int *rain_ani[] = {rain_ico, rain1_ico, rain2_ico, rain3_ico, rain4_ico};
+int *thun_ani[] = {thndr_ico, rain1_ico, rain2_ico, rain3_ico, rain4_ico};
+int *snow_ani[] = {snow_ico, snow1_ico, snow2_ico, snow3_ico, snow4_ico};
+int *mony_ani[] = {moony_ico, moony1_ico, moony_ico, moony_ico, moony_ico, moony2_ico, moony_ico, moony_ico, moony3_ico, moony_ico, moony_ico, moony_ico, moony_ico, moony4_ico, moony_ico, moony_ico, moony_ico};
+int *mist_ani[] = {mist_ico, mist1_ico, mist2_ico, mist3_ico};
+int *mistn_ani[] = {mistn_ico, mist1n_ico, mist2n_ico, mist3n_ico};
+int *clodn_ani[] = {cloudyn_ico, cloudy1n_ico, cloudy2n_ico, cloudy3n_ico, cloudy4n_ico, cloudy5n_ico, cloudy6n_ico, cloudy7n_ico, cloudy8n_ico, cloudy9n_ico};
+int *ovctn_ani[] = {ovrcstn_ico};
