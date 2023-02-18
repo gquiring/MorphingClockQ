@@ -10,9 +10,14 @@ small seconds by Trenck
 
 this remix by timz3818 adds am/pm, working night mode (change brightness and colors), auto dissapearing first digit, and lower brightness icons
 
-This remix by Gary Quiring 3/2022
+This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
+Update: 2/18/2023
+Added hostname: MorphClockQ  (helps insteading of using IP address for web config)
+Changed the weather direction to a different color.  When the Wind is from the South the S looks like a 5
+Fixed humidity if less than 10%, display issue 
 
+3/2022
 Changed NTP calls, would not compile
 USA Daylight savings time won't work with NTPClientlib, it's default is EU DST, change the line below for USA default
 library/NTPCLientlib/src/NTClientlib.h
@@ -151,12 +156,13 @@ const char ntpsvr[]   = "time.google.com";
 
 
 /////////========== CONFIGURATION ==========//////////
-/* Set your wifi info, api key, date format, unit type, and location in params.h
- * If you want to adjust color/brightness/position of screen objects you can do that in the following sections.
- */
+// Set your wifi info, api key, date format, unit type, and location in params.h
 
 
+ //If you have more than one Morphing Clock you will need to change the hostname
+const char* WiFi_hostname = "MorphClockQ";
 
+//If you want to adjust color/brightness/position of screen objects you can do that in the following sections.
   byte day_bright = 70; //sets daytime brightness; 70 is default. values higher than this may not work.
   byte dim_bright = 20; // sets brightness for partly dimmed mode
   byte nm_bright = 25; // sets brightness for night mode
@@ -313,13 +319,13 @@ void select_palette() {
       break;
     case 5:
        cc_time = cc_bblu;
-       cc_wind = cc_wht;
+       cc_wind = cc_grn;
        cc_date = cc_ylw;
        cc_wtext = cc_grn;
        break;
     case 6:
       cc_time = cc_org;
-      cc_wind = cc_wht;
+      cc_wind = cc_red;
       cc_date = cc_grn;
       cc_wtext = cc_ylw;
       break;
@@ -500,6 +506,8 @@ int connect_wifi (String n_wifi, String n_pass)
   Serial.print ("Trying WiFi Connect:");
   Serial.println (n_wifi);
   
+  WiFi.hostname(WiFi_hostname);  //hostname not in params.h
+  
   WiFi.begin (n_wifi, n_pass);
   WiFi.mode(WIFI_STA);
   while (WiFi.status () != WL_CONNECTED)
@@ -620,7 +628,7 @@ int condM = -1;  //-1 - undefined, 0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast,
 String condS = "";
 int wind_speed;
 int wind_nr;
-String wind_direction = "";
+String wind_direction = "  ";
 int gust = 0;
 
   
@@ -794,34 +802,34 @@ void getWeather ()
       wind_nr = round(((sval.toInt() % 360))/45.0) + 1;
       switch (wind_nr){
         case 1:
-          wind_direction = "N";
+          wind_direction = "N ";
           break;
         case 2:
           wind_direction = "NE";
           break;
         case 3:
-          wind_direction = "E";
+          wind_direction = "E ";
           break;
         case 4:
           wind_direction = "SE";
           break;
         case 5:
-          wind_direction = "S";
+          wind_direction = "S ";
           break;
         case 6:
           wind_direction = "SW";
           break;
         case 7:
-          wind_direction = "W";
+          wind_direction = "W ";
           break;
         case 8:
           wind_direction = "NW";
           break;
         case 9:
-          wind_direction = "N";
+          wind_direction = "N ";
           break;        
         default:
-          wind_direction = "";
+          wind_direction = "  ";
           break;
       }                
     }
@@ -957,14 +965,30 @@ switch (condM)
     }
 
 }
-          
+
+void draw_wind ()
+{
+  wind_lstr = String (wind_speed);
+  if (wind_speed != 0) {
+    switch (wind_lstr.length ()) {     //We have to pad the string to exactly 4 characters
+      case 1:
+       wind_lstr = String (wind_lstr) + String (" ");
+       break;
+    }
+    TFDrawText (&display,wind_direction, wind_x, wind_y, cc_wht);  //Change Wind Direction color for readability 
+    TFDrawText (&display,wind_lstr, wind_x + 8, wind_y, cc_wind);  
+  }
+  else {
+      wind_lstr = String ("CALM");  
+      TFDrawText (&display,wind_lstr, wind_x, wind_y, cc_wind); 
+  }
+  wind_humi = 1;  //Reset switch for toggling wind or humidity display
+}
+
 //
 void draw_weather ()
 {
   int value = 0;
-
-  // Clear the top line
-//GQGQ  TFDrawText (&display, String("                   "), tmp_x, tmp_y, cc_dgr);
 
   if (tempM == -10000 && humiM == -10000 && presM == -10000)
   {
@@ -1030,39 +1054,27 @@ void draw_weather ()
       lcc = cc_blu;
     if (humiM < 20)
       lcc = cc_wht;
-    humi_lstr = String (humiM) + String (humi_label) + String (" ");
+
+    // Pad humi to exactly 4 characters  
+    humi_lstr = String (humiM) + String (humi_label);
+    switch (humi_lstr.length ()) {
+       case 2:
+         humi_lstr = String (humi_lstr) + String ("  ");
+         break;
+       case 3:
+         humi_lstr = String (humi_lstr) + String (" ");
+         break;      
+    }    
     TFDrawText (&display, humi_lstr, humi_x, humi_y, lcc); // humidity
  
     int cc = color_disp;
     cc = color_disp;
     
-   //-pressure
-//    lstr = String (presM)+ String(press_label);
-//    xo = press_x;
-//    yo = press_y;
-//  	if(presM < 1000)
-//        xo= press_x + 1;   
-//    TFDrawText (&display, lstr, xo, yo, cc);
-   
     //draw wind speed and direction
     if (wind_speed > -10000)
     { 
-      if (wind_speed != 0) {
-        wind_lstr = String (wind_direction) + String (wind_speed);
-        switch (wind_lstr.length ()) {     //We have to pad the string to exactly 4 characters
-        case 2:
-         wind_lstr = String (wind_lstr) + String ("  ");
-         break;
-        case 3:
-         wind_lstr = String (wind_lstr) + String (" ");
-         break;
-        }      
-      }  
-      else
-        wind_lstr = String ("CALM");   
-        
+      draw_wind ();
       wind_humi = 1;  //Reset switch for toggling wind or humidity display
-      TFDrawText (&display,wind_lstr, wind_x, wind_y, cc_wind);
     }
 
     if ( String (c_vars[EV_WANI]) == "N" ) {
@@ -1684,7 +1696,7 @@ void loop()
           wind_humi = 0;
         }
         else {
-          TFDrawText (&display,wind_lstr, wind_x, wind_y, cc_wind);
+          draw_wind ();
           wind_humi = 1;
         }
       }
