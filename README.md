@@ -13,6 +13,7 @@ Daylight savings time not working for USA locations.  It requires editing the NT
 Fixed the morphing problem when the hour changed, it now morphs all the digits, much cooler looking.
 
 Added/modified the following features:
+Fixed the checking the weather delay which in turn fixed the morphing problem with the seconds.
 
 Display weather text ie - Cloudy instead of using icons, I found the icons confusing to decipher.  It's on toggle, you can choose what you like.
 
