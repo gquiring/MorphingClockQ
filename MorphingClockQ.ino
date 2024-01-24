@@ -12,6 +12,12 @@ this remix by timz3818 adds am/pm, working night mode (change brightness and col
 
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
+
+Update: 1/23/2024
+There is an issue checking the weather that produces a HTTP 400 Bad request error after the code is running for many hours/days.  
+Something internally must be overflowing and I don't know what it is.  So simple solution will be to auto reboot the ESP.  
+Default weather refresh check will occur every 5 minutes (changed from 2 minutes)
+
 Update: 2/20/2023
 There was always a 5-6 second delay getting the weather.  It turns out it was not openweathermap.  The code was waiting for a newline response that never showed up
 The default timeout was the issue, I lowered it to .5 seconds and it works perfectly now.  This caused the last digit in the seconds to morph incorrectly
@@ -132,7 +138,7 @@ Ticker display_ticker;
 PxMATRIX display(64, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
 
 
-void getWeather();
+//void getWeather();  What is this doing here?
 // needed variables
 byte hh;
 byte mm;
@@ -227,7 +233,7 @@ int cc_wtext;
 
 //===OTHER SETTINGS===
 int ani_speed = 500;      // sets animation speed
-int weather_refresh = 2;  // sets weather refresh interval in minutes; must be between 1 and 59
+int weather_refresh = 5;  // sets weather refresh interval in minutes; must be between 1 and 59
 int morph_off = 0;        // display issue due to weather check
 
 //=== POSITION ===
@@ -271,6 +277,23 @@ String humi_lstr = "   ";
 int wind_humi;
 String wind_direction[10] = { "  ", "N ", "NE", "E ", "SE", "S ", "SW", "W ", "NW", "N " };
 String weather_text[12] = {"        "," SUNNY  ","P-CLOUDY","OVERCAST","  RAIN  ","T-STORMS","  SNOW  ","  HAZY  "," CLEAR  "," FOGGY  "," CLOUDY ","OVERCAST"};
+
+const char server[] = "api.openweathermap.org";
+WiFiClient client;
+int in = -10000;
+int tempMax = -10000;
+int tempM = -10000;
+int presM = -10000;
+int humiM = -10000;
+int wind_speed = -10000;
+int condM = -1;  //-1 - undefined, 0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow
+String condS = "";
+int wind_nr;
+
+//Keep count on how many times it failed to connect to weather service
+int failed_connect = 0;
+int failed_data = 0;
+int failed_missing = 0;
 
 WiFiServer httpsvr(80);  //Initialize the server on Port 80
 
@@ -568,9 +591,10 @@ void setup() {
 
   select_palette();
 
-  //  delay (3000);  Why wait?
-
   getWeather();
+  if (wind_speed < 0)  //sometimes weather does not work on first attempt
+   getWeather();
+
   httpsvr.begin();  // Start the HTTP Server
 
   //start NTP
@@ -602,43 +626,13 @@ void setup() {
   display.fillScreen(0);
 }
 
-
-const char server[] = "api.openweathermap.org";
-WiFiClient client;
-int in = -10000;
-int tempMax = -10000;
-int tempM = -10000;
-int presM = -10000;
-int humiM = -10000;
-int wind_speed = -10000;
-int condM = -1;  //-1 - undefined, 0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow
-String condS = "";
-int wind_nr;
-
-
 void getWeather() {
   if (!sizeof(apiKey)) {
     Serial.println("Missing API KEY for weather data, skipping");
     return;
   }
-  client.setTimeout(500);  //readStringUntil has a default 5 second wait
   
   if (client.connect(server, 80)) {
-    /*
-    // Make a HTTP request:
-    client.print("GET /data/2.5/weather?");
-    client.print("q=" + String(c_vars[EV_GEOLOC]));     // City, Country
-    client.print("&appid=" + String(c_vars[EV_OWMK]));  // API Key
-    client.print("&cnt=1");
-    if (String(c_vars[EV_METRIC]) == "Y")
-      client.println("&units=metric");
-    else
-      client.println("&units=imperial");
-
-    client.println("Host: api.openweathermap.org");
-    client.println("Connection: close");
-    client.println();
-    */
     client.print("GET /data/2.5/weather?q=" + String(c_vars[EV_GEOLOC]) + "&appid=" + String(c_vars[EV_OWMK]) + "&cnt=1");
     if (String(c_vars[EV_METRIC]) == "Y")
       client.println("&units=metric");
@@ -649,9 +643,15 @@ void getWeather() {
     client.println("Connection: close");
     client.println();
   } else {
-    Serial.println("Weather:unable to connect");
-    return;
+    Serial.println("Weather: Unable to connect");
+    failed_connect++;
+    if (failed_connect >= 5) {
+      Serial.println("Weather: 5 failed attempts to connect.  Reset");
+      resetclock();
+    }
   }
+//Serial.println(ESP.getFreeHeap());
+//Serial.println(ESP.getMaxFreeBlockSize());
 
   // Sample of what the weather API sends back
   //  {"coord":{"lon":-80.1757,"lat":33.0185},"weather":[{"id":741,"main":"Fog","description":"fog","icon":"50n"},
@@ -661,16 +661,19 @@ void getWeather() {
   //  "dt":1647516313,"sys":{"type":2,"id":2034311,"country":"US","sunrise":1647516506,
   //  "sunset":1647559782},"timezone":-14400,"id":4597919,"name":"Summerville","cod":200}
 
-  // delay (1500);  // Why is there a delay here????
  
   String sval = "";
   int bT, bT2;
+  failed_missing = 0;
 
-  String line = client.readStringUntil('\n');
-  //Serial.println(line);
-  if (!line.length())
-    Serial.println("Weather:unable to retrieve data");
-  else {
+  client.setTimeout(500);                      //We need to reduce the timeout delay for the readStringUntil
+  String line = client.readStringUntil('\n');  //apparently the returned data does not have a new line so a timeout occurs
+
+  if (!line.length()) {
+    Serial.println("Weather: Unable to retrieve data");
+    return;
+  }
+
     bT = line.indexOf("\"icon\":\"");
     if (bT > 0) {
       bT2 = line.indexOf("\"", bT + 8);
@@ -722,8 +725,12 @@ void getWeather() {
       bT2 = line.indexOf(",\"", bT + 7);
       sval = line.substring(bT + 7, bT2);
       tempM = sval.toInt();
-    } else
-      Serial.println("temp NOT found!");
+    } else {
+        Serial.println("temp NOT found!");
+        Serial.println(line);
+        failed_missing++;
+        Serial.println(failed_missing);
+      }
 
     //humiM
     bT = line.indexOf("\"humidity\":");
@@ -731,8 +738,11 @@ void getWeather() {
       bT2 = line.indexOf(",\"", bT + 11);
       sval = line.substring(bT + 11, bT2);
       humiM = sval.toInt();
-    } else
+    } else {
       Serial.println("humidity NOT found!");
+      failed_missing++;
+      Serial.println(failed_missing);
+      }
 
     //wind speed
     bT = line.indexOf("\"speed\":");
@@ -743,6 +753,8 @@ void getWeather() {
     } else {
       wind_speed = -10000;
       Serial.println("windspeed NOT found");
+      failed_missing++;
+      Serial.println(failed_missing);
     }
     //   bT = line.indexOf ("\"timezone\":");  // Timezone offset
     //   if (bT > 0)
@@ -764,10 +776,15 @@ void getWeather() {
     } else {
       wind_nr = 0;
       Serial.println("Wind direction NOT found");
+      failed_missing++;
+      Serial.println(failed_missing);
     }
+  
+  if (failed_missing >= 4) {
+    Serial.println("Weather: Most likely HTTP 400 error.  Reset");
+    resetclock();
   }
 }
-
 // End of Get Weather
 
 #include "TinyIcons.h"
@@ -869,9 +886,12 @@ void draw_weather() {
   int value = 0;
 
   if (tempM == -10000 && humiM == -10000 && presM == -10000) {
-    //TFDrawText (&display, String("NO WEATHER DATA"), 1, 1, cc_dgr);
-    Serial.println("No weather data available");
-  } else {
+     Serial.println("No weather data available");
+     failed_data++;
+     if (failed_data >= 5)
+       resetclock();
+     return;
+  }
 
     //-temperature
     int lcc = cc_red;
@@ -952,7 +972,6 @@ void draw_weather() {
     } else {
       draw_weather_conditions();
     }
-  }
 }
 // End display weather
 
@@ -1496,7 +1515,7 @@ void loop() {
       if (morph_off == 0) {
         if (s0 != digit0.Value()) digit0.Morph(s0);
       } else {
-        digit0.SetColor(cc_blk);
+        digit0.SetColor(cc_blk);                          //This else block is currently not used
         digit0.Draw(8);  //Turn off all segments to black
         morph_off = 0;
         digit0.SetColor(cc_time);
