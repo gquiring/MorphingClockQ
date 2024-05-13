@@ -1,6 +1,6 @@
 This is a remix of Harry's Morphing Clock that includes weather like temperature, wind and humidity.  The project requires an ESP8266.  All other hardware required is in the .ino source.  
 
-If you already have the Morphing Clock installed prior to May 2024 you must wipe your flash memory.  From the Tools menu, select Erase Flash-All flash settings.  The config file has changed requiring this one time only to wipe it. 
+If you already have the Morphing Clock installed prior to May 2024 you must wipe your flash memory.  From the Tools menu, select Erase Flash-All flash settings.  The config file has changed requiring this one time only to wipe it. This new version also uses new libraries.  The Google Drive link is in the ino source.  
 
 Please note when installing the board manager for the ESP8266 you must install the old version 2.7.4.  Newer versions will NOT compile.
 
