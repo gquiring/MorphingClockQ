@@ -14,5 +14,8 @@ Daylight savings time not working for USA locations. It requires editing the NTP
 
 Instead of searching for all the libraries I made a Zip file on Google Drive for an easier install.  The link is in the .ino source.  
 
+Build instuctions are on youtube.  The Arduino part is out of date and will need updates.  
+https://youtu.be/5IvTE6gUA08
+
 Credits:
 This version of Hari's Morphing clock is from several remix versions including timz3818. They all did a nice job enhancing this cool clock - Thank you!
