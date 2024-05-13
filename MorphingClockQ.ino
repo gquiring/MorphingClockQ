@@ -13,6 +13,39 @@ this remix by timz3818 adds am/pm, working night mode (change brightness and col
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
+Update: 5/11/2024
+OpenWeatherMap depreciated their 2.5 API. The 3.0 call requires a credit card on file to use the 'free' service.
+If you go over the allotted amount of API calls per month you will be charged. I decided to discontinue using
+their service because I cannot guarantee the code would stay under the allotment if there is an issue with
+your Wifi connection or possible other modifications done to the code.  I also don't like the idea of having
+a credit on file with them.
+
+This new release requires you to setup a new params.h settings. So copy over paramsEDITTHISFIRST.h to params.h
+Added Day/Night mode.  Setup options are in params.h or web interface.
+Rewrote the entire getweather function.  It now supports multiple weather services, this requires an updated JSON library.
+Weather logic can work with latitude/longtitude or postal code depending on weather service selected.
+Fixed an old bug, the M.D.Y for date never looked at the web config if you changed it.  
+Added logic if weather check is bad, don't wait the X interval, try getting weather on the next minute
+Redid the entire web interface.  It's a lot faster and much easier to program in new settings
+The Wifi library was changed over to the default Wifi Arduino library
+Finally nailed the last bug with the config file not writing the full length of the variables
+
+A note of recognition goes to Eric Olson for pushing me to use the Json library, this made the code a lot cleaner and easier to 
+setup multiple weather services.  Also a nod to ChatGPT, it got me through a lot of issues getting the new web interface to work.
+
+
+Update: 4/20/2024
+OpenWeatherMap changed their GET request parsing with no notice. The City, Country code can no longer have a space in it.  That's not possible
+since many cities use multiple names.  The temporary solution is to use a + sign between the words.  This explains the intermittent 400 Bad request
+errors that have been popping up fairly often these past few months.
+ 
+Update: 2/13/2024
+Some more weather debugging try again logic.  I used Kali and WireShark to monitor the HTTP traffic to openweather.  It didn't reveal anything useful.
+I still can't understand these HTTP 400 errors.  When the code does the GET it looks good on WireShark yet it returns an occasional 400 error.  
+
+Update: 1/26/2024
+Fixed web interface example: New York City,NY should have been New York City,USA
+
 Update: 1/23/2024
 There is an issue checking the weather that produces a HTTP 400 Bad request error after the code is running for many hours/days.  
 Something internally must be overflowing and I don't know what it is.  So simple solution will be to auto reboot the ESP.  
@@ -62,26 +95,26 @@ Commented out OTA feature for the web interaface, the code is not excuted anywhe
 Youtube: https://youtu.be/5IvTE6gUA08
 
 If you don't want to manually download the libraries I have them all in a zip file
-https://drive.google.com/file/d/1cQjsZGft_tuw0jCCs2JDoIu5awqr7lbc/
+https://drive.google.com/file/d/1yFphQR7dkwSFQQPh21kPAiotAsr-qphc/view?usp=sharing
+
 
 
 copy paramsEDITTHISFIRST.h to params.h
 Edit params.h and fill in your SSID, Password and other settings
 Required libraries to compile:
-AdaFruit GFX Library v1.10.4 (Install all dependancies)
-PxMatrix LED Matrix Library by Dominic Buchstaller v1.3.0
-Wifi Manager by TZAPU .16.0 (listed as Tablatronix)
+AdaFruit GFX Library v1.16.0 (Install all dependancies)
+PxMatrix LED Matrix Library by Dominic Buchstaller v1.8.1
+Wifi Manager
 NTPClientLib by German Martin 3.0.2 Beta
-Timelib by Paul Stoffregen 1.6.1
-Arduino JSON 5.13.5 (Do not install 6.x)
-ESP Async UDP Not in the IDE library use the link below
-https://github.com/me-no-dev/ESPAsyncUDP
+Time by Michael Margolis 1.6.1
+ArduinoJson by Benoit Blanchon 7.0.4
+ESP Async Webserver by Me-No-Dev 1.2.3
 
 From the File, Preferences menu, install this additional Link in the board
 Manager URL option:
 http://arduino.esp8266.com/stable/package_esp8266com_index.json
 
-From the Tools menu, Board Manager select ESP8266 2.7.4 anything 3.0 or greater won't compile
+From the IDE Tools menu, Board Manager select ESP8266 2.7.4 anything 3.0 or greater won't compile  <<<<<<<READ THIS CLOSELY!!!!!!!!!!!!!!!!!!!!!!
 
 To fix the Daylight Savings option for USA you must use an external editor
 You need to edit this file: (located in your Arduino library directory)
@@ -105,21 +138,24 @@ EDGELEC 120pcs Breadboard Jumper Wires 7.8 inch (7.8CM)
 https://www.amazon.com/dp/B07GD2BWPY
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-provided 'AS IS', use at your own risk
+Provided 'AS IS', use at your own risk
  */
 
 
 // we need these:
 #include <TimeLib.h>
 #include <NtpClientLib.h>
-#include <ESP8266WiFi.h>
+#include <WiFiClient.h>
+
+#include <ESPAsyncWebServer.h>
+
 #include <PxMatrix.h>
-#include "FS.h"
 #include <ArduinoJson.h>
 #include "TinyFont.h"
 #include "Digit.h"
 #include "Digitsec.h"
 #include "params.h"
+
 
 //ESP8266 setup
 #ifdef ESP8266
@@ -138,9 +174,9 @@ Ticker display_ticker;
 PxMATRIX display(64, 32, P_LAT, P_OE, P_A, P_B, P_C, P_D, P_E);
 
 
-//void getWeather();  What is this doing here?
 // needed variables
 byte hh;
+byte hh24;
 byte mm;
 byte ss;
 byte ntpsync = 1;
@@ -167,7 +203,7 @@ const char ntpsvr[] = "time.google.com";
 
 
 /////////========== CONFIGURATION ==========//////////
-// Set your wifi info, api key, date format, unit type, and location in params.h
+// Set your wifi info, api key, date format, unit type, weather service, lat/long, postal code in params.h
 
 
 //If you have more than one Morphing Clock you will need to change the hostname
@@ -233,7 +269,7 @@ int cc_wtext;
 
 //===OTHER SETTINGS===
 int ani_speed = 500;      // sets animation speed
-int weather_refresh = 5;  // sets weather refresh interval in minutes; must be between 1 and 59
+int weather_refresh = 10;  // sets weather refresh interval in minutes; cannot be less than 30 minutes for weatherbit.IO
 int morph_off = 0;        // display issue due to weather check
 
 //=== POSITION ===
@@ -258,14 +294,9 @@ byte tmp_y = 2;
 byte wind_x = 0;
 byte wind_y = 2;
 
-// Pressure position and label
-byte press_x = nosee;
-byte press_y = nosee;
-char press_label[] = "";
-
 // Humidity postion and label
-byte humi_x = nosee;
-byte humi_y = nosee;
+byte humi_x = 0;
+byte humi_y = 2;
 char humi_label[] = "%";
 
 // Text weather condition
@@ -274,33 +305,44 @@ byte wtext_y = 2;
 
 String wind_lstr = "   ";
 String humi_lstr = "   ";
-int wind_humi;
+int wind_humi = 0;   //Toggle display switch for Wind or Humidty
+//bool UseWTcode = true;
+bool drawWeather = false;
+int lcc;
 String wind_direction[10] = { "  ", "N ", "NE", "E ", "SE", "S ", "SW", "W ", "NW", "N " };
-String weather_text[12] = {"        "," SUNNY  ","P-CLOUDY","OVERCAST","  RAIN  ","T-STORMS","  SNOW  ","  HAZY  "," CLEAR  "," FOGGY  "," CLOUDY ","OVERCAST"};
+String weather_text[26] = {"        ","CLEARSKY","P-CLOUDY","OVERCAST","  RAIN  ","T-STORMS","  SNOW  ","  HAZY  "," CLEAR  "," FOGGY  "," CLOUDY ","BLIZZARD",
+                           " Misty  ", "FLURRIES", "  SLEET ", "FRZ RAIN", " SHOWER ", "DRIZZLE ", "  HAIL  ", "  SMOKE ", "SANDDUST", "FRZ FOG ", "FRZ DRIZ", "SNOWRAIN", "THUNDER ",
+                           "ICE PELT" };
 
-const char server[] = "api.openweathermap.org";
-WiFiClient client;
-int in = -10000;
-int tempMax = -10000;
+String weatherserver = "";
+bool ForceWeatherCheck = false; //If unable to connect to weather service don't wait for the next check interval
+
+//JSON 
+JsonDocument doc;
+
+WiFiClient client;   
+
 int tempM = -10000;
-int presM = -10000;
 int humiM = -10000;
 int wind_speed = -10000;
-int condM = -1;  //-1 - undefined, 0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow
+int wind_dir = -10000;
+
+int codeWA = -1;
+int codeWT = 0;
+int weatherCode;
+String tmp_line = "";  
 String condS = "";
-int wind_nr;
+
 
 //Keep count on how many times it failed to connect to weather service
 int failed_connect = 0;
-int failed_data = 0;
-int failed_missing = 0;
 
-WiFiServer httpsvr(80);  //Initialize the server on Port 80
 
 //settings
-#define NVARS 13
-#define LVARS 40
+#define NVARS 19
+#define LVARS 50
 char c_vars[NVARS][LVARS];
+
 typedef enum e_vars {
   EV_SSID,
   EV_PASS,
@@ -308,14 +350,233 @@ typedef enum e_vars {
   EV_24H,
   EV_METRIC,
   EV_DATEFMT,
-  EV_OWMK,
-  EV_GEOLOC,
+  EV_APIKEY,
+  EV_POSTAL,
   EV_DST,
-  EV_OTA,
   EV_WANI,
   EV_PALET,
-  EV_BRIGHT
+  EV_BRIGHT,
+  EV_LONG,
+  EV_LAT,
+  EV_COUNTRY,
+  EV_WSERVICE,
+  EV_NIGHTB,
+  EV_NIGHTE,
+  EV_WDEFINE     //This var will be user definable based on weather service
 };
+
+AsyncWebServer server(80);
+
+String index_html = "<html><head><title>Morphing ClockQ Configuration Setup></title></head><body>\
+<form action='/save' method='post'>\
+SSID:     <input type='text' name='wifi_ssid' value='%WIFI_SSID%' maxlength='50'><br>\
+Password: <input type='password' name='wifi_pass' value='%WIFI_PASS%' maxlength='50'><br><br>\
+<div>\
+<style>input[type='text'][maxlength='3'] {width: calc(3ch + 15px);}</style>\
+Timezone: <input type='text' name='timezone' value='%TIMEZONE%' maxlength='3'>\
+<span> EST=-5, Central=-6, Mountain=-7, Pacific=-8</span><br>\
+</div>\
+<div>\
+<style>input[type='text'] {width: 20px;}</style>\
+24 Hour format: <input type='text' name='military' value='%MILITARY%'>\
+<span> Enter Y for 24 hour, Enter N for 12 hour</span><br><br>\
+</div>\
+<div>\
+<style>input[type='text'] {width: 70px;}</style>\
+Date Format: <input type='text' name='date_fmt' value='%DATE_FMT%'>\
+<span>  M.D.Y,  D.M.Y,  Y.M.D</span><br>\
+</div>\
+<div>\
+<style>input[type='text'] {width: 70px;}</style>\
+Daylight Savings Time (true/false): <input type='text' name='dst_sav' value='%DST_SAV%'><br><br>\
+</div>\
+<div>\
+<style>input[type='number'][maxlength='1'] {width: calc(2ch + 15px);}</style>\
+Color Palette: <input type='number' name='c_palet' value='%C_PALET%' maxlength='3' min='1' max='7'>\
+<span> 1=Cyan,2=Red,3=Blue,4=Yellow,5=Bright Blue,6=Orange,7=Green</span><br>\
+</div>\
+<div>\
+<style>input[type='number'][maxlength='2'] {width: calc(2ch + 15px);}</style>\
+Brightness: <input type='number' name='brightness' value='%BRIGHTNESS%' maxlength='2' min='20' max='70'>\
+<span> Max is 70, min is 20</span><br><br>\
+</div>\
+<p>Dim the display for night time hours in 24hr format, enter 0 in both fields to disable</p>\
+<div>\
+<style>input[type='number'][maxlength='2'] {width: calc(4ch + 15px);}</style>\
+Night Start: <input type='number' name='nightStart' value='%NIGHT_START%' maxlength='2' min='0' max='24'><br>\
+<style>input[type='number'][maxlength='2'] {width: calc(4ch + 15px);}</style>\
+Night End: <input type='number' name='nightEnd' value='%NIGHT_END%' maxlength='2' min='0' max='24'><br><br>\
+</div>\
+<p>Use OpenMeteo.io it does not require an account or API key</p>\
+<p>Read the weather docs for all the details - weather.pdf</p>\
+<div>\
+<style>input[type='number'][maxlength='1'] {width: calc(1ch + 15px);}</style>\
+Weather Service: <input type='number' name='weatherservice' value='%WEATHER_SERVICE%' maxlength='3' min='1' max='9'>\
+<span> 1=WeatherAPI.com, 2=WeatherBit.io, 3=PirateWeather.net, 4=OpenMeteo.io, 5=WeatherUnlocked</span><br>\
+</div>\
+<div>\
+<style>input[type='text'][maxlength='50'] {width: calc(50ch + 15px);}</style>\
+API Key:         <input type='text' name='apiKey' value='%API_KEY%' maxlength='50'><br>\
+</div>\
+Postal Code:     <input type='text' name='postal_code' value='%POSTAL_CODE%'><br>\
+Country Code:    <input type='text' name='country_code' value='%COUNTRY_CODE%'><br>\
+Latitude:        <input type='text' name='latitude' value='%LATITUDE%'><br>\
+Longitude:       <input type='text' name='longitude' value='%LONGITUDE%'><br>\
+<div>\
+Define:          <input type='text' name='wdefine' value='%WDEFINE%'>\
+<span> For most weather services this field will not be used</span><br>\
+<style>input[type='text'][maxlength='1'] {width: calc(1ch + 15px);}</style>\
+Metric (Y/N):    <input type='text' name='u_metric' value='%U_METRIC%' maxlength='1'><br>\
+<style>input[type='text'][maxlength='1'] {width: calc(1ch + 15px);}</style>\
+Weather Animation (Y/N): <input type='text' name='w_animation' value='%W_ANIMATION%' maxlength='1'><br><br>\
+<input type='submit' value='Save'>\
+</form></body></html>";
+
+//<input type='submit' value='Save'>\
+//<input type='button' onclick='saveSettings()' value='Save'>\
+// Handle root url
+
+void handleRoot(AsyncWebServerRequest *request) {
+  String page = index_html;
+
+  page.replace("%WIFI_SSID%", c_vars[EV_SSID]);
+  page.replace("%WIFI_PASS%", c_vars[EV_PASS]);
+  page.replace("%TIMEZONE%", c_vars[EV_TZ]);
+  page.replace("%MILITARY%", c_vars[EV_24H]);
+  page.replace("%DATE_FMT%", c_vars[EV_DATEFMT]);
+  page.replace("%DST_SAV%", c_vars[EV_DST]);
+  page.replace("%C_PALET%", c_vars[EV_PALET]);
+  page.replace("%BRIGHTNESS%", c_vars[EV_BRIGHT]);
+  page.replace("%NIGHT_START%", c_vars[EV_NIGHTB]);
+  page.replace("%NIGHT_END%", c_vars[EV_NIGHTE]);
+  page.replace("%WEATHER_SERVICE%", c_vars[EV_WSERVICE]);
+  page.replace("%API_KEY%", c_vars[EV_APIKEY]);
+  page.replace("%POSTAL_CODE%", c_vars[EV_POSTAL]);
+  page.replace("%COUNTRY_CODE%", c_vars[EV_COUNTRY]);
+  page.replace("%LATITUDE%", c_vars[EV_LAT]);
+  page.replace("%LONGITUDE%", c_vars[EV_LONG]);
+  page.replace("%U_METRIC%", c_vars[EV_METRIC]);
+  page.replace("%W_ANIMATION%", c_vars[EV_WANI]);
+  page.replace("%WDEFINE%", c_vars[EV_WDEFINE]);
+
+  request->send(200, "text/html", page);
+}
+
+// Handle save request
+void handleSave(AsyncWebServerRequest *request) {
+  for (uint8_t i = 0; i < request->params(); i++) {
+    if (request->getParam(i)->name() == "wifi_ssid") {
+      strcpy(c_vars[EV_SSID], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "wifi_pass") {
+      strcpy(c_vars[EV_PASS], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "timezone") {
+      strcpy(c_vars[EV_TZ], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "military") {
+        String upperTMP = request->getParam(i)->value();
+        upperTMP.toUpperCase();
+        strcpy(c_vars[EV_24H], upperTMP.c_str());
+    } else if (request->getParam(i)->name() == "date_fmt") {
+        String upperTMP = request->getParam(i)->value();
+        upperTMP.toUpperCase();
+        strcpy(c_vars[EV_DATEFMT], upperTMP.c_str());
+    } else if (request->getParam(i)->name() == "dst_sav") {
+      strcpy(c_vars[EV_DST], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "c_palet") {
+      strcpy(c_vars[EV_PALET], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "brightness") {
+      strcpy(c_vars[EV_BRIGHT], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "nightStart") {
+      strcpy(c_vars[EV_NIGHTB], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "nightEnd") {
+      strcpy(c_vars[EV_NIGHTE], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "weatherservice") {
+      strcpy(c_vars[EV_WSERVICE], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "apiKey") {
+      strcpy(c_vars[EV_APIKEY], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "postal_code") {
+      strcpy(c_vars[EV_POSTAL], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "country_code") {
+      strcpy(c_vars[EV_COUNTRY], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "latitude") {
+      strcpy(c_vars[EV_LAT], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "longitude") {
+      strcpy(c_vars[EV_LONG], request->getParam(i)->value().c_str());
+    } else if (request->getParam(i)->name() == "u_metric") {
+        String upperTMP = request->getParam(i)->value();
+        upperTMP.toUpperCase();
+        strcpy(c_vars[EV_METRIC], upperTMP.c_str());
+    } else if (request->getParam(i)->name() == "w_animation") {
+        String upperTMP = request->getParam(i)->value();
+        upperTMP.toUpperCase();
+        strcpy(c_vars[EV_WANI], upperTMP.c_str());
+    } else if (request->getParam(i)->name() == "wdefine") {
+      strcpy(c_vars[EV_WDEFINE], request->getParam(i)->value().c_str());
+    }
+  }
+
+/* Not working
+ //Hidden option to remove the config file, type 'reset' into the time zone field
+  if (String(c_vars[EV_TZ]) == "reset") {
+    vars_remove();
+    ESP.restart();
+  }
+*/
+  vars_write();
+  request->send(200, "text/plain", "Settings saved");
+  ESP.restart();  //Always restart device after changes
+
+
+}
+
+
+void notFound(AsyncWebServerRequest *request) {
+  request->send(404, "text/plain", "Not found");
+}
+
+
+
+void web_server() {
+  
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/save", HTTP_POST, handleSave);
+
+  server.onNotFound(notFound);
+  server.begin();
+}
+
+//Setup Weather services
+void select_weatherservice() {
+  switch (atoi(c_vars[EV_WSERVICE])) {
+    case 1:
+      weatherserver = String("api.weatherapi.com");
+      weather_refresh = 5;
+      break;
+    case 2:
+      weatherserver = String("api.weatherbit.io");
+      weather_refresh = 30;  //Must be at least 30 due to 50 calls per day limit
+      break;
+    case 3:
+      weatherserver = String("api.pirateweather.net");
+      weather_refresh = 5;
+      break;
+    case 4:
+      weatherserver = String("api.open-meteo.com");
+      weather_refresh = 5;
+      break;
+    case 5:
+      weatherserver = String("api.weatherunlocked.com");
+      weather_refresh = 5;
+      break;
+    case 7:  //Not working
+      weatherserver = String("dataservice.accuweather.com");
+      weather_refresh = 30;
+      break;
+    default:
+      Serial.println("Invalid weather service setup");
+
+  }
+}
+
 
 // Color palette
 void select_palette() {
@@ -382,6 +643,19 @@ void display_updater() {
   if (x > 70 or x < 0)
     x = 70;
 
+//Change brightness for day/nightime
+
+ if (atoi(c_vars[EV_NIGHTB]) != 0 && atoi(c_vars[EV_NIGHTE]) != 0)
+  if ( atoi(c_vars[EV_NIGHTE]) < atoi(c_vars[EV_NIGHTB]) ) {
+    if (hh24 >= atoi(c_vars[EV_NIGHTB]) || hh24 < atoi(c_vars[EV_NIGHTE])) {
+      x = 5;
+    }
+  } else {
+    if ( hh24 >= atoi(c_vars[EV_NIGHTB]) && hh24 < atoi(c_vars[EV_NIGHTB]) ) {
+      x = 5;
+    }
+  }
+
   display.display(x);  //set brightness
 }
 
@@ -392,45 +666,55 @@ bool toBool(String s) {
 }
 
 int vars_read() {
-  //Remove file for testing when it has corrupt data
-  //SPIFFS.remove("/mvars.cfg");
-  //File varf = SPIFFS.open ("/mvars.cfg", "w");
-  //  varf.close ();
-  //return 1;
-
-  File varf = SPIFFS.open("/mvars.cfg", "r");
+  File varf = SPIFFS.open("/mvars2.cfg", "r");
   if (!varf) {
     Serial.println("Failed to open config file");
     return 0;
   }
   //read vars
-  for (int i = 0; i < NVARS; i++)
-    for (int j = 0; j < LVARS; j++)
+  for (int i = 0; i < NVARS; i++) {
+    for (int j = 0; j < LVARS; j++) {
       c_vars[i][j] = (char)varf.read();
+    //  Serial.print(c_vars[i][j]);
+    }
+  //  Serial.println(":");
+  }
 
   varf.close();
-  show_config_vars();
   return 1;
 }
 
 int vars_write() {
-  File varf = SPIFFS.open("/mvars.cfg", "w");
-  if (!varf) {
-    Serial.println("Failed to open config file");
-    return 0;
-  }
-  Serial.println("Writing config file ......");
+  Serial.println("Writing config file ....");
+  File varf = SPIFFS.open("/mvars2.cfg", "w");
+  
   for (int i = 0; i < NVARS; i++) {
     for (int j = 0; j < LVARS; j++) {
       if (varf.write(c_vars[i][j]) != 1)
         Serial.println("error writing var");
+ //     else
+ //       Serial.print(c_vars[i][j]);
     }
+
   }
-  //
   varf.close();
+  Serial.println("Finished writing config");
   return 1;
 }
 
+//Routine to remove the config file - Used for development purposes
+int vars_remove() {
+ Serial.println("Remove config file");
+ if (SPIFFS.exists("/mvars2.cfg")) {
+    if (SPIFFS.remove("/mvars2.cfg")) {
+      Serial.println("File deleted successfully");
+    } else {
+      Serial.println("Failed to delete file");
+    }
+ }
+}
+
+/*  Not used
 unsigned char h2int(char c) {
   if (c >= '0' && c <= '9') {
     return ((unsigned char)c - '0');
@@ -472,10 +756,12 @@ String urldecode(String str) {
 
   return encodedString;
 }
+*/
 
 //Debugging
 void show_config_vars() {
   Serial.println("From config file ....");
+  return;
 
   Serial.print("SSID=");
   Serial.println(c_vars[EV_SSID]);
@@ -490,9 +776,9 @@ void show_config_vars() {
   Serial.print("Date-Format=");
   Serial.println(c_vars[EV_DATEFMT]);
   Serial.print("apiKey=");
-  Serial.println(c_vars[EV_OWMK]);
-  Serial.print("Location=");
-  Serial.println(c_vars[EV_GEOLOC]);
+  Serial.println(c_vars[EV_APIKEY]);
+  Serial.print("Post Code=");
+  Serial.println(c_vars[EV_POSTAL]);
   Serial.print("DST=");
   Serial.println(c_vars[EV_DST]);
   Serial.print("Weather Animation=");
@@ -501,22 +787,48 @@ void show_config_vars() {
   Serial.println(c_vars[EV_PALET]);
   Serial.print("Brightness=");
   Serial.println(c_vars[EV_BRIGHT]);
+  Serial.print("Longitude=");
+  Serial.println(c_vars[EV_LONG]);
+  Serial.print("Latitude=");
+  Serial.println(c_vars[EV_LAT]);
+  Serial.print("Country Code=");
+  Serial.print(c_vars[EV_COUNTRY]);
+  Serial.print("Weather Service=");
+  Serial.println(c_vars[EV_WSERVICE]);
+  Serial.print("Night Begin=");
+  Serial.println(c_vars[EV_NIGHTB]);
+  Serial.print("Night End=");
+  Serial.println(c_vars[EV_NIGHTE]);
+  Serial.print("Weather Define=");
+  Serial.println(c_vars[EV_WDEFINE]);
+  
 }
 
 //If the config file is not setup copy from params.h
 void init_config_vars() {
+  Serial.println("Initialize vars from params.h");
   strcpy(c_vars[EV_SSID], wifi_ssid);
   strcpy(c_vars[EV_PASS], wifi_pass);
   strcpy(c_vars[EV_TZ], timezone);
   strcpy(c_vars[EV_24H], military);
   strcpy(c_vars[EV_METRIC], u_metric);
   strcpy(c_vars[EV_DATEFMT], date_fmt);
-  strcpy(c_vars[EV_OWMK], apiKey);
-  strcpy(c_vars[EV_GEOLOC], location);
+  strcpy(c_vars[EV_APIKEY], apiKey);
+  strcpy(c_vars[EV_POSTAL], postal_code);
   strcpy(c_vars[EV_DST], dst_sav);
   strcpy(c_vars[EV_WANI], w_animation);
   strcpy(c_vars[EV_PALET], c_palet);
   strcpy(c_vars[EV_BRIGHT], brightness);
+  strcpy(c_vars[EV_LONG], longitude);
+  strcpy(c_vars[EV_LAT], latitude);
+  strcpy(c_vars[EV_COUNTRY], country_code);
+  strcpy(c_vars[EV_WSERVICE], weatherservice);
+  strcpy(c_vars[EV_NIGHTB], nightStart);
+  strcpy(c_vars[EV_NIGHTE], nightEnd);
+  strcpy(c_vars[EV_WDEFINE], wdefine);
+
+  vars_write();
+
 }
 
 //Wifi Connection
@@ -548,7 +860,7 @@ void setup() {
   Serial.begin(9600);
   while (!Serial)
     delay(500);  //delay for Leonardo
-  display.begin(16);
+    display.begin(16);
   //     display.setDriverChip(FM6126A);
   //     display.setMuxDelay(0,1,0,0,0);
 
@@ -556,13 +868,20 @@ void setup() {
   display_ticker.attach(0.002, display_updater);
 #endif
 
-  TFDrawText(&display, String("  MORPH CLOCK  "), 0, 1, cc_blu);
+  TFDrawText(&display, String(" MORPH CLOCKQ  "), 0, 1, cc_blu);
   TFDrawText(&display, String("  STARTING UP  "), 0, 10, cc_blu);
+
+  //Use this for serial console delay to see all serial.prints for debugging
+  //Serial.println("Waiting for input from keyboard before continuing .....");
+  //while (Serial.available() == 0 ) {}
+ 
+
+  Serial.println("Setup begin");
 
   // Read the config file
   if (SPIFFS.begin()) {
-    Serial.println("SPIFFS Initialize....ok");
     if (!vars_read()) {
+      Serial.println("Unable to open config file, will create it");
       init_config_vars();  //Copy from params.h to EV array
     }
   } else {
@@ -571,9 +890,6 @@ void setup() {
 
   String lstr = String("TIMEZONE:") + String(c_vars[EV_TZ]);
   TFDrawText(&display, lstr, 4, 24, cc_cyan);
-
-  show_config_vars();
-
 
   //connect to wifi network
 
@@ -589,13 +905,11 @@ void setup() {
   TFDrawText(&display, String("WIFI CONNECTED "), 3, 10, cc_grn);
   TFDrawText(&display, String(WiFi.localIP().toString()), 4, 17, cc_grn);
 
-  select_palette();
+  select_palette();  
+  select_weatherservice();
+  web_server();  //Start AsyncWebServer
 
   getWeather();
-  if (wind_speed < 0)  //sometimes weather does not work on first attempt
-   getWeather();
-
-  httpsvr.begin();  // Start the HTTP Server
 
   //start NTP
   Serial.print("TimeZone for NTP.Begin:");
@@ -625,165 +939,295 @@ void setup() {
 
   display.fillScreen(0);
 }
+// End Setup
 
+//Convert wind direction from degrees to North,South etc...
+int convert_windir(String x) {
+  int w;
+  w = round(((x.toInt() % 360)) / 45.0) + 1;
+  return w;
+}
+
+//Get the weather, parse the JSON response
 void getWeather() {
-  if (!sizeof(apiKey)) {
-    Serial.println("Missing API KEY for weather data, skipping");
+
+  weatherCode = -10000;
+  humiM = -10000;
+  wind_dir = -10000;
+  wind_speed = -10000;
+  float float_tmp;
+  
+  bool latlong;
+
+  ForceWeatherCheck = false;  //If we don't get a valid response override the interval for checking the weather
+  bool noTemp = false;
+  String uom = "";
+  String cord = "";
+  String url = "";
+  String loc = "";
+  String WeatherTXT = "";
+  
+  //If the weather API keys are in the array it will use them instead of the config file
+   if ( apikeys[atoi(c_vars[EV_WSERVICE]) - 1].length() != 0) {
+     String apiKey = apikeys[ atoi(c_vars[EV_WSERVICE]) - 1 ] ;
+     strcpy(c_vars[EV_APIKEY], apiKey.c_str());
+
+//     Serial.print("Using Stored APIKEY:");
+//     Serial.println(c_vars[EV_APIKEY]);
+   }
+
+  if (!sizeof(apiKey) && String(c_vars[EV_WSERVICE]) != "4") {  //Open-meteo does not require API key
+    Serial.println("Weather: Missing API KEY");
     return;
   }
-  
-  if (client.connect(server, 80)) {
-    client.print("GET /data/2.5/weather?q=" + String(c_vars[EV_GEOLOC]) + "&appid=" + String(c_vars[EV_OWMK]) + "&cnt=1");
-    if (String(c_vars[EV_METRIC]) == "Y")
-      client.println("&units=metric");
-    else
-      client.println("&units=imperial");
 
-    client.println("Host: api.openweathermap.org");
-    client.println("Connection: close");
-    client.println();
-  } else {
-    Serial.println("Weather: Unable to connect");
+  if ( !client.connect(weatherserver, 80)) {
+    Serial.print("Weather: Unable to connect ");
+    Serial.println(weatherserver);
+    ForceWeatherCheck = true;
     failed_connect++;
-    if (failed_connect >= 5) {
-      Serial.println("Weather: 5 failed attempts to connect.  Reset");
+    if (failed_connect >= 10) {
+      Serial.println("Weather: 10 failed attempts to connect.  Reset");
       resetclock();
     }
-  }
-//Serial.println(ESP.getFreeHeap());
-//Serial.println(ESP.getMaxFreeBlockSize());
-
-  // Sample of what the weather API sends back
-  //  {"coord":{"lon":-80.1757,"lat":33.0185},"weather":[{"id":741,"main":"Fog","description":"fog","icon":"50n"},
-  //  {"id":500,"main":"Rain","description":"light rain","icon":"10n"}],"base":"stations","main":{"temp":55.47,
-  //  "feels_like":55.33,"temp_min":52.81,"temp_max":57.79,"pressure":1014,"humidity":98},"visibility":402,
-  //  "wind":{"speed":4.61,"deg":0},"rain":{"1h":0.25},"clouds":{"all":100},
-  //  "dt":1647516313,"sys":{"type":2,"id":2034311,"country":"US","sunrise":1647516506,
-  //  "sunset":1647559782},"timezone":-14400,"id":4597919,"name":"Summerville","cod":200}
-
- 
-  String sval = "";
-  int bT, bT2;
-  failed_missing = 0;
-
-  client.setTimeout(500);                      //We need to reduce the timeout delay for the readStringUntil
-  String line = client.readStringUntil('\n');  //apparently the returned data does not have a new line so a timeout occurs
-
-  if (!line.length()) {
-    Serial.println("Weather: Unable to retrieve data");
     return;
   }
 
-    bT = line.indexOf("\"icon\":\"");
-    if (bT > 0) {
-      bT2 = line.indexOf("\"", bT + 8);
-      sval = line.substring(bT + 8, bT2);
-      //0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow
+  //Is Latitude & Longtitude setup?
+  loc = String(c_vars[EV_LAT]) + String(c_vars[EV_LONG]);
+  if (loc.length() < 3)
+    latlong = false;
+  else
+    latlong = true;
+
+  //Build GET request per weather service API
+  switch (atoi(c_vars[EV_WSERVICE])) {
+    case 1:  //weatherAPI
+      if (latlong)
+        loc = String(c_vars[EV_LAT]) + "," + String(c_vars[EV_LONG]);
+      else
+        loc = String(c_vars[EV_POSTAL]);  //No lat/long so use the postal code for location
+
+        url = "/v1/current.json?key=" + String(c_vars[EV_APIKEY]) + "&q=" +  String(loc);
+      break;
+    case 2:  //WeatherBit
+      if (latlong)
+        loc = "lat=" + String(c_vars[EV_LAT]) + "&lon=" + String(c_vars[EV_LONG]);
+      else
+        loc = "postal_code=" + String(c_vars[EV_POSTAL]);
+
+      if (String(c_vars[EV_METRIC]) == "Y")
+        uom = "&units=M";
+      else
+        uom = "&units=I";
       
-      if (sval.equals("01d"))
-        condM = 1;  //sunny
-      else if (sval.equals("01n"))
-        condM = 8;  //clear night
-      else if (sval.equals("02d"))
-        condM = 2;  //partly cloudy day
-      else if (sval.equals("02n"))
-        condM = 10;  //partly cloudy night
-      else if (sval.equals("03d"))
-        condM = 3;  //overcast day
-      else if (sval.equals("03n"))
-        condM = 11;  //overcast night
-      else if (sval.equals("04d"))
-        condM = 3;  //overcast day
-      else if (sval.equals("04n"))
-        condM = 11;  //overcast night
-      else if (sval.equals("09d"))
-        condM = 4;  //rain
-      else if (sval.equals("09n"))
-        condM = 4;
-      else if (sval.equals("10d"))
-        condM = 4;
-      else if (sval.equals("10n"))
-        condM = 4;
-      else if (sval.equals("11d"))
-        condM = 5;  //thunder
-      else if (sval.equals("11n"))
-        condM = 5;
-      else if (sval.equals("13d"))
-        condM = 6;  //snow
-      else if (sval.equals("13n"))
-        condM = 6;
-      else if (sval.equals("50d"))
-        condM = 7;  //haze (day)
-      else if (sval.equals("50n"))
-        condM = 9;  //fog (night)
-       
-      condS = sval;
-    }
-    //tempM
-    bT = line.indexOf("\"temp\":");
-    if (bT > 0) {
-      bT2 = line.indexOf(",\"", bT + 7);
-      sval = line.substring(bT + 7, bT2);
-      tempM = sval.toInt();
-    } else {
-        Serial.println("temp NOT found!");
-        Serial.println(line);
-        failed_missing++;
-        Serial.println(failed_missing);
-      }
+      url = "/v2.0/current?" + String(loc) + String(uom) + "&key=" + String(c_vars[EV_APIKEY]) + "&include=minutely";
+      break;
+    case 3:  //PirateWeather
+      loc = String(c_vars[EV_LAT]) + "," + String(c_vars[EV_LONG]);
+      if (String(c_vars[EV_METRIC]) == "Y")
+        uom = "?units=ca";
+      else
+        uom = "?units=us";
+      
+      url = "/forecast/" + String(c_vars[EV_APIKEY]) + "/" + String(loc) + String(uom) + "&exclude=minutely,hourly,daily";
+      break;
+    case 4:  //Openmeteo
+      if (String(c_vars[EV_METRIC]) == "Y")
+        uom = "&temperature_unit=celsius&wind_speed_unit=ms";
+      else
+        uom = "&temperature_unit=fahrenheit&wind_speed_unit=mph";
+                                                            
+       url = "/v1/forecast?latitude=" + String(c_vars[EV_LAT]) + "&longitude=" + String(c_vars[EV_LONG]) + "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m" + String(uom);
+       break;
+    case 5:  //WeatherUnlocked  this service requires a 2nd key, we will use WDEFINE to store it
+      if (latlong)
+        loc = String(c_vars[EV_LAT]) + "," + String(c_vars[EV_LONG]);
+      else
+        loc = String(c_vars[EV_COUNTRY]) + "." + String(c_vars[EV_POSTAL]);
 
-    //humiM
-    bT = line.indexOf("\"humidity\":");
-    if (bT > 0) {
-      bT2 = line.indexOf(",\"", bT + 11);
-      sval = line.substring(bT + 11, bT2);
-      humiM = sval.toInt();
-    } else {
-      Serial.println("humidity NOT found!");
-      failed_missing++;
-      Serial.println(failed_missing);
-      }
-
-    //wind speed
-    bT = line.indexOf("\"speed\":");
-    if (bT > 0) {
-      bT2 = line.indexOf(",\"", bT + 8);
-      sval = line.substring(bT + 8, bT2);
-      wind_speed = sval.toInt();
-    } else {
-      wind_speed = -10000;
-      Serial.println("windspeed NOT found");
-      failed_missing++;
-      Serial.println(failed_missing);
-    }
-    //   bT = line.indexOf ("\"timezone\":");  // Timezone offset
-    //   if (bT > 0)
-    //   {
-    //     int tz;
-    //     bT2 = line.indexOf (",\"", bT + 11);
-    //     sval = line.substring (bT + 11, bT2);
-    //     tz = sval.toInt()/3600;
-    //   }
-    //   else
-    //     Serial.println ("timezone offset NOT found!");
-
-    //wind direction
-    bT = line.indexOf("\"deg\":");
-    if (bT > 0) {
-      bT2 = line.indexOf(",\"", bT + 6);
-      sval = line.substring(bT + 6, bT2);
-      wind_nr = round(((sval.toInt() % 360)) / 45.0) + 1;
-    } else {
-      wind_nr = 0;
-      Serial.println("Wind direction NOT found");
-      failed_missing++;
-      Serial.println(failed_missing);
-    }
-  
-  if (failed_missing >= 4) {
-    Serial.println("Weather: Most likely HTTP 400 error.  Reset");
-    resetclock();
+      url = "/api/current/" + String(loc) + "?app_id=" + String(c_vars[EV_WDEFINE]) + "&app_key=" + String(c_vars[EV_APIKEY]);
+      break;
+    case 7:  //AccuWeather
+      url = "/currentconditions/v1/" + String(c_vars[EV_POSTAL]) + "?apikey=" + String(c_vars[EV_APIKEY]) + "&details=true";
+      break;
+    default:
+      Serial.println("Invalid weather service configured");
+      return;
+   
   }
+
+/*
+  Serial.print("Host:");
+  Serial.println(String(weatherserver));
+  Serial.print("URL:");
+  Serial.println(url);
+*/
+
+//Send GET Request
+  client.print("GET " + url + " HTTP/1.1\r\n" + "Host: " + String(weatherserver) + "\r\n" + "Accept: application/json\r\n" + "Connection: close\r\n\r\n");
+
+
+
+// Sample response from weatherbit.io
+// {"count":1,"data":[{"app_temp":64.3,"aqi":42,"city_name":"Summerville","clouds":50,"country_code":"US","datetime":"2024-04-22:20",
+//  "dewpt":42.5,"dhi":112.58,"dni":879.32,"elev_angle":48.07,"ghi":759.58,"gust":18.3,"h_angle":60,"lat":33.028,"lon":-80.1739,
+//  "ob_time":"2024-04-22 20:43","pod":"d","precip":0,"pres":1016,"rh":42,"slp":1018.7451,"snow":0,"solar_rad":702,"sources":["rtma","radar","satellite"],
+//  "state_code":"SC","station":"F7658","sunrise":"10:40","sunset":"23:56","temp":66,"timezone":"America/New_York","ts":1713818620,"uv":4.0905547,"vis":9.9,
+//  "weather":{"code":802,"icon":"c02d","description":"Scattered clouds"},"wind_cdir":"NNW","wind_cdir_full":"north-northwest","wind_dir":344,"wind_spd":9}]}
+
+// Sample response from api.weatherapi.com
+// {"location":{"name":"Summerville","region":"South Carolina","country":"USA","lat":33.02,"lon":-80.21,"tz_id":"America/New_York","localtime_epoch":1714070832,
+//  "localtime":"2024-04-25 14:47"},"current":{"temp_c":26.6,"temp_f":79.9,"is_day":1,"condition":{"text":"Sunny","icon":"//cdn.weatherapi.com/weather/64x64/day/113.png",
+//  "code":1000},"wind_mph":4.3,"wind_kph":6.8,"wind_degree":3,"wind_dir":"N","humidity":34,"cloud":21}}
+
+// Sample response from open-meteo
+// {"latitude":33.01305,"longitude":-80.204895,"generationtime_ms":0.09107589721679688,"utc_offset_seconds":0,"timezone":"GMT","timezone_abbreviation":"GMT","elevation":29.0,
+// "current_units":{"time":"iso8601","interval":"seconds","temperature_2m":"°F","relative_humidity_2m":"%","weather_code":"wmo code","wind_speed_10m":"mp/h","wind_direction_10m":"°"},
+// "current":{"time":"2024-04-28T13:15","interval":900,"temperature_2m":70.3,"relative_humidity_2m":69,"weather_code":0,"wind_speed_10m":6.7,"wind_direction_10m":111}}
+
+// Sample response from WeatherUnlocked
+// {"lat":32.9,"lon":-80.04,"alt_m":14.0,"alt_ft":45.93,"wx_desc":"Mostly cloudy","wx_code":1,"wx_icon":"PartlyCloudyDay.gif","temp_c":28.3,"temp_f":82.94,"feelslike_c":29.39,
+// "feelslike_f":84.9,"humid_pct":57.0,"windspd_mph":10.56,"windspd_kmh":17.0,"windspd_kts":9.18,"windspd_ms":4.72,"winddir_deg":200.0,"winddir_compass":"SSW","cloudtotal_pct":75.0,
+// "vis_km":16.0,"vis_mi":9.94,"vis_desc":null,"slp_mb":1018.6,"slp_in":30.16,"dewpoint_c":18.98,"dewpoint_f":66.16}
+
+//  Serial.print("Free heap memory: ");
+//  Serial.print(ESP.getFreeHeap());
+//  Serial.println(" bytes");
+//  Serial.println(ESP.getMaxFreeBlockSize());
+
+
+  client.setTimeout(600);    //We need to reduce the timeout delay for the readStringUntil
+  Serial.print("Reading data from: ");
+  Serial.println(weatherserver);
+
+  tmp_line = client.readStringUntil('{');   //Toss header, eat all the data until first char of JSON data
+  Serial.println(tmp_line);
+
+// We need to restore the brace that was removed during the header strip
+  tmp_line = "{" + client.readString(); // JSON string does not have a terminator, timeout will end readstring
+  if (tmp_line.length() < 3) {
+    Serial.println("Weather: Unable to retrieve JSON data");
+    ForceWeatherCheck = true;
+    return;
+  }
+
+//  Serial.println(tmp_line);  //Take this out after debugging, it slows down the clock
+  
+
+//Parse JSON Weather response
+  
+DeserializationError error = deserializeJson(doc, tmp_line);
+if (error) {
+  Serial.print("ERROR: DeserializeJson() returned ");
+  Serial.println(error.c_str());
+  ForceWeatherCheck = true;
+  return;
+}
+
+switch (atoi(c_vars[EV_WSERVICE])) {
+  case 1:  //weatherAPI
+    if (String(c_vars[EV_METRIC]) == "Y") {
+      if (!doc["current"]["temp_c"]) { noTemp = true; break; }
+      tempM = doc["current"]["temp_c"];
+      wind_speed = doc["current"]["wind_kph"];
+      }
+    else {
+      if (!doc["current"]["temp_f"]) { noTemp = true; break; }
+      tempM = doc["current"]["temp_f"];
+      wind_speed = doc["current"]["wind_mph"];
+    }
+    humiM = doc["current"]["humidity"];
+    wind_dir = convert_windir((doc["current"]["wind_degree"]));
+    weatherCode = doc["current"]["condition"]["code"];
+    break;
+  case 2:  //WeatherBit
+    if (!doc["data"][0]["app_temp"]) { noTemp = true; break; }
+    tempM = doc["data"][0]["app_temp"];
+    wind_speed = doc["data"][0]["wind_spd"];
+    wind_dir = convert_windir((doc["data"][0]["wind_dir"]));
+    humiM = doc["data"][0]["rh"];
+    weatherCode = doc["data"][0]["weather"]["code"];
+    break;
+  case 3:  //PirateWeather
+    if (!doc["currently"]["temperature"]) { noTemp = true; break; }
+    tempM = doc["currently"]["temperature"];
+    wind_speed = doc["currently"]["windSpeed"];
+    wind_dir = convert_windir((doc["currently"]["windBearing"]));
+    float_tmp = doc["currently"]["humidity"];
+    humiM = float_tmp * 100;
+    weatherCode = 0;  //They don't support it
+    //const char *xyz = doc["currently"]["icon"];
+    break;
+  case 4:  //OpenMeteo
+    if (!doc["current"]["temperature_2m"]) { noTemp = true; break; }
+    tempM = doc["current"]["temperature_2m"];
+    wind_speed = doc["current"]["wind_speed_10m"];
+    wind_dir = convert_windir((doc["current"]["wind_direction_10m"]));
+    humiM = doc["current"]["relative_humidity_2m"];
+    weatherCode = doc["current"]["weather_code"];
+    break;
+  case 5:  //WeatherUnlocked
+    if (String(c_vars[EV_METRIC]) == "Y") {
+      if (!doc["temp_c"]) { noTemp = true; break; }
+      tempM = doc["temp_c"];
+      wind_speed = doc["current"]["wind_kph"];
+      }
+    else {
+      if (!doc["temp_f"]) { noTemp = true; break; }
+      tempM = doc["temp_f"];
+      wind_speed = doc["windspd_mph"];
+    }
+    humiM = doc["humid_pct"];
+    wind_dir = convert_windir((doc["winddir_deg"]));
+    weatherCode = doc["wx_code"];
+    break;
+  case 7:  //Accuweather
+    if (!doc["Temperature"]["Imperial"]["Value"]) { noTemp = true; break; }
+    tempM = doc["Temperature"]["Imperial"]["Value"];
+    humiM = doc["RelativeHumidity"];
+    wind_dir = convert_windir((doc["Wind"]["Direction"]["Degrees"]));
+    wind_speed = doc["Wind"]["Speed"]["Imperial"]["Value"];
+    break;
+}
+
+//If we could not find the key for the temperature no sense in continuing
+if (noTemp == true) {
+  Serial.println("Unable to find temperature key in JSON table");
+  return;
+}
+
+
+/*
+  Serial.print("Temp:");
+  Serial.println(tempM);
+  Serial.print("Humidity:");
+  Serial.println(humiM);
+  Serial.print("Wind_mph:");
+  Serial.println(wind_speed);
+  Serial.print("Wind_Direction:");
+  Serial.println(wind_dir);
+  Serial.print("Weathercode:");
+  Serial.println(weatherCode);
+*/
+
+//Convert weather codes to text or animation
+  switch (atoi(c_vars[EV_WSERVICE])) {
+    case 1:
+      convert_weathercode_weatherAPI();
+      break;
+    case 2:
+      convert_weathercode_weatherbitIO();
+      break;
+    case 4:
+      convert_weathercode_openmeteo();
+      break;
+    case 5:
+      convert_weathercode_weatherUnlocked();
+      break;
+  }
+
+
 }
 // End of Get Weather
 
@@ -792,28 +1236,401 @@ void getWeather() {
 
 int xo = 1, yo = 26;
 char use_ani = 0;
-void draw_weather_conditions() {
-  //0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow, 7, hazy, 9 - fog
 
-  xo = img_x;
-  yo = img_y;
+void convert_weathercode_weatherAPI() {
 
-  if (condM == 0) {
-    Serial.print("!weather condition icon unknown, show: ");
-    Serial.println(condS);
-    int cc_dgr = display.color565(30, 30, 30);
-    //draw the first 5 letters from the unknown weather condition
-    String lstr = condS.substring(0, (condS.length() > 5 ? 5 : condS.length()));
-    lstr.toUpperCase();
-    TFDrawText(&display, lstr, xo, yo, cc_dgr);
-  } else {
-    //  TFDrawText (&display, String("     "), xo, yo, 0);
-  }
-  xo = img_x;
-  yo = img_y;
-  switch (condM) {
-    case 0:  //unk
+  codeWT = 0;
+  codeWA = 0;
+  switch (weatherCode) {
+    case 1000:
+      codeWT = 1;
+      codeWA = 1;
       break;
+    case 1003:
+      codeWT = 2;
+      codeWA = 2;
+      break;
+    case 1006:
+      codeWT = 10;
+      codeWA = 10;
+      break;
+    case 1009:
+      codeWT = 3;
+      codeWA = 3;
+      break;
+    case 1030:
+      codeWT = 12;
+      codeWA = 7;
+    case 1063:
+      codeWT = 4;
+      codeWA = 4;
+      break;
+    case 1066:
+      codeWT = 6;
+      codeWA = 6;
+      break;
+    case 1069:
+      codeWT = 14;
+      codeWA = 4;
+      break;
+    case 1072:
+      codeWT = 15;
+      codeWA = 4;
+      break;
+    case 1087:
+      codeWT = 24;
+      codeWA = 5;
+      break;
+    case 1114:
+      codeWT = 6;
+      codeWA = 6;
+      break;
+    case 1117:
+      codeWT = 11;
+      codeWA = 6;
+      break;
+    case 1135:
+      codeWT = 9;
+      codeWA = 9;
+      break;
+    case 1147:
+      codeWT = 21;
+      codeWA = 9;
+      break;
+    case 1150:
+      codeWT = 17;
+      codeWA = 4;
+      break;
+    case 1153:
+      codeWT = 17;
+      codeWA = 4;
+      break;
+    case 1168:
+      codeWT = 22;
+      codeWA = 4;
+      break;
+    case 1171:
+      codeWT = 22;
+      codeWA = 4;
+      break;
+    case 1180 ... 1195:
+      codeWT = 4;
+      codeWA = 4;
+      break;
+    case 1198 ... 1201:
+      codeWT = 15;
+      codeWA = 4;
+      break;
+    case 1204 ... 1207:
+      codeWT = 14;
+      codeWA = 4;
+      break;
+    case 1210 ... 1225:
+      codeWT = 6;
+      codeWA = 6;
+      break;
+    case 1237:
+      codeWT = 18;
+      codeWA = 4;
+      break;
+    case 1240 ... 1243:
+      codeWT = 16;
+      codeWA = 4;
+      break;
+    case 1246:
+      codeWT = 4;
+      codeWA = 4;
+      break;
+    case 1249 ... 1252:
+      codeWT = 14;
+      codeWA = 4;
+      break;
+    case 1255 ... 1258:
+      codeWT = 23;
+      codeWA = 4;
+      break;
+    case 1261 ... 1264:
+      codeWT = 18;
+      codeWA = 4;
+      break;
+    case 1273 ... 1276:
+      codeWT = 5;
+      codeWA = 5;
+      break;
+    case 1279 ... 1282:
+      codeWT = 6;
+      codeWA = 6; 
+      break;
+    default:
+      Serial.print("Weather code not mapped:");
+      Serial.println(weatherCode);
+      break;
+  }
+
+ //   Serial.print("codeWT:");
+ //   Serial.println(codeWT);
+
+}
+
+void convert_weathercode_openmeteo() {
+  codeWT = 0;
+  codeWA = 0;
+  switch (weatherCode) {
+    case 0:
+      codeWT = 1;
+      codeWA = 1;
+      break;
+    case 1 ... 3:
+      codeWT = 2;
+      codeWA = 10;
+      break;
+    case 45 ... 48:
+      codeWT = 9;
+      codeWA = 9;
+      break;
+    case 51 ... 55:
+      codeWT = 17;
+      codeWA = 4;
+      break;
+    case 56 ... 57:
+      codeWT = 22;
+      codeWA = 4;
+      break;
+    case 61 ... 65:
+      codeWT = 4;
+      codeWA = 4;
+      break;
+    case 66 ... 67:
+      codeWT = 15;
+      codeWA = 4;
+      break;
+    case 71 ... 77:
+      codeWT = 6;
+      codeWA = 6;
+      break;
+    case 80 ... 86:
+      codeWT = 16;
+      codeWA = 4;
+      break;
+    case 95 ... 99:
+      codeWT = 5;
+      codeWA = 5;
+      break;
+    default:
+      Serial.print("Weather code not mapped:");
+      Serial.println(weatherCode);
+      break;
+  }
+}
+
+
+void convert_weathercode_weatherbitIO() {
+
+  codeWA = 0;
+  codeWT = 0;
+      switch (weatherCode) {
+        case 200 ... 232:
+          codeWT = 5;
+          codeWA = 5;
+          break;
+        case 233:
+          codeWT = 18;
+          codeWA = 4;
+          break;
+        case 300 ... 302:
+          codeWT = 17;
+          codeWA = 4;
+          break;
+        case 500 ... 502:
+          codeWT = 4;
+          codeWA = 4;
+          break;
+        case 511:
+          codeWT = 15;
+          codeWA = 4;
+          break;
+        case 520 ... 521:
+          codeWT = 16;
+          codeWA = 4;
+          break;
+        case 522:
+          codeWT = 4;
+          codeWA = 4;
+          break;
+        case 600 ... 610:
+          codeWT = 6;
+          codeWA = 6;
+          break;
+        case 611 ... 612:
+          codeWT = 14;
+          codeWA = 4;
+          break;
+        case 621 ... 622:
+          codeWT = 6;
+          codeWA = 6;
+          break;
+        case 623:
+          codeWT = 13;
+          codeWA = 6;
+          break;
+        case 700:
+          codeWT = 12;
+          codeWA = 4;
+          break;
+        case 711:
+          codeWT = 19;
+          codeWA = 9;
+          break;
+        case 721:
+          codeWT = 7;
+          codeWA = 7;
+          break;
+        case 731:
+          codeWT = 20;
+          codeWA = 9;
+          break;
+        case 741:
+          codeWT = 9;
+          codeWA = 9;
+          break;
+        case 800 ... 802:
+          codeWT = 1;
+          codeWA = 1;
+          break;
+        case 803:
+          codeWT = 2;
+          codeWA = 2;
+          break;
+        case 804:
+          codeWT = 3;
+          codeWA = 3;
+          break;
+        default:
+          Serial.print("Weather code not mapped:");
+          Serial.println(weatherCode);
+          break;
+      }
+
+//      Serial.print("codeWT:");
+//      Serial.println(codeWT);
+
+}
+
+void convert_weathercode_weatherUnlocked() {
+
+  codeWA = 0;
+  codeWT = 0;
+      switch (weatherCode) {
+        case 0:
+          codeWT = 1;
+          codeWA = 1;
+          break;
+        case 1:
+        case 2:
+        case 3:
+          codeWT = 2;
+          codeWA = 2;
+          break;
+        case 10:
+          codeWT = 12;
+          codeWA = 7;
+          break;
+        case 21:
+          codeWT = 4;
+          break;
+        case 22:
+          codeWT = 6;
+          break;
+        case 23:
+          codeWT = 14;
+          break;
+        case 24:
+          codeWT = 15;
+          break;
+        case 29:
+          codeWT = 5;
+          break;
+        case 38:
+          codeWT = 6;
+          break;
+        case 39:
+          codeWT = 11;
+          break;
+        case 45:
+        case 46:
+        case 47:
+        case 48:
+        case 49:
+          codeWT = 9;
+          break;
+        case 50 ... 57:
+          codeWT = 17;
+          break;
+        case 60:
+        case 61:
+        case 62:
+        case 63:
+        case 64:
+        case 65:
+          codeWT = 4;
+          break;
+        case 66:
+        case 67:
+          codeWT = 15;
+          break;
+        case 68:
+        case 69:
+          codeWT = 14;
+          break;
+        case 70:
+        case 71:
+        case 72:
+        case 73:
+        case 74:
+        case 75:
+          codeWT = 6;
+          break;
+        case 79:
+          codeWT = 25;
+          break;
+        case 80:
+        case 81:
+        case 82:
+          codeWT = 4;
+          break;
+        case 83:
+        case 84:
+          codeWT = 14;
+          break;
+        case 85 ... 86:
+          codeWT = 6;
+          break;
+        case 87 ... 88:
+          codeWT = 25;
+          break;
+        case 91 ... 93:
+          codeWT = 5;
+          break;
+        case 94:
+          codeWT = 6;
+          break;
+        default:
+          Serial.print("Weather code not mapped:");
+          Serial.println(weatherCode);
+          break;
+      }
+}
+
+
+
+void draw_weather_conditions() {
+  if (codeWA < 0)
+    return;
+
+  xo = img_x;
+  yo = img_y;
+
+  switch (codeWA) {
     case 1:  //sunny
       DrawIcon(&display, sunny_ico, xo, yo, 10, 5);
       use_ani = 1;
@@ -858,43 +1675,75 @@ void draw_weather_conditions() {
       DrawIcon(&display, ovrcstn_ico, xo, yo, 10, 5);
       use_ani = 1;
       break;
+    Default:
+	  TFDrawText (&display, String("     "), xo, yo, 0);
+	  use_ani = 1;
+      break;
   }
 }
 
 
-void draw_wind() {
-  if (wind_speed < 0)
+void draw_wind_humidity() {
+  //drawWeather checks to confirm if all the weather was actually displayed first. don't toggle if not true
+  if (wind_speed < 0 || wind_dir < 0  || humiM < 0 || !drawWeather)
     return;
-  wind_lstr = String(wind_speed);
-  if (wind_speed != 0) {
-    switch (wind_lstr.length()) {  //We have to pad the string to exactly 4 characters
-      case 1:
-        wind_lstr = String(wind_lstr) + String(" ");
+
+  switch (wind_humi) {
+  case 0:  //Wind
+    wind_humi = 1;
+    wind_lstr = String(wind_speed);
+    if (wind_speed != 0) {
+      switch (wind_lstr.length()) {  //We have to pad the string to exactly 4 characters
+        case 1:
+          wind_lstr = String(wind_lstr) + String(" ");
+          break;
+      }
+      TFDrawText(&display, wind_direction[wind_dir], wind_x, wind_y, cc_wht);  //Change Wind Direction color for readability
+      TFDrawText(&display, wind_lstr, wind_x + 8, wind_y, cc_wind);
+    } else {
+      wind_lstr = String("CALM");
+      TFDrawText(&display, wind_lstr, wind_x, wind_y, cc_wind);
+    }
+    break;
+  case 1:  //Humidity
+    wind_humi = 0;
+    lcc = cc_red;
+    if (humiM < 80)
+      lcc = cc_ylw;
+    if (humiM < 60)
+      lcc = cc_grn;
+    if (humiM < 40)
+      lcc = cc_blu;
+    if (humiM < 20)
+      lcc = cc_wht;
+
+    // Pad humi to exactly 4 characters
+    humi_lstr = String(humiM) + String(humi_label);
+    switch (humi_lstr.length()) {
+      case 2:
+        humi_lstr = String(humi_lstr) + String("  ");
+        break;
+      case 3:
+        humi_lstr = String(humi_lstr) + String(" ");
         break;
     }
-    TFDrawText(&display, wind_direction[wind_nr], wind_x, wind_y, cc_wht);  //Change Wind Direction color for readability
-    TFDrawText(&display, wind_lstr, wind_x + 8, wind_y, cc_wind);
-  } else {
-    wind_lstr = String("CALM");
-    TFDrawText(&display, wind_lstr, wind_x, wind_y, cc_wind);
+   TFDrawText(&display, humi_lstr, humi_x, humi_y, lcc);  // humidity
+   break;
   }
-  wind_humi = 1;  //Reset switch for toggling wind or humidity display
 }
 
 //
 void draw_weather() {
-  int value = 0;
+  drawWeather = true;   //if this was never called because the getweather failed, the 10 second flip on wind/humidity will still display
+  wind_humi = 0;
 
-  if (tempM == -10000 && humiM == -10000 && presM == -10000) {
-     Serial.println("No weather data available");
-     failed_data++;
-     if (failed_data >= 5)
-       resetclock();
+  if (tempM == -10000 || humiM == -10000) {
+     Serial.println("Weather: No data to display weather");
      return;
   }
 
     //-temperature
-    int lcc = cc_red;
+    lcc = cc_red;
     char tmp_Metric;
     if (String(c_vars[EV_METRIC]) == "Y") {
       tmp_Metric = 'C';
@@ -934,41 +1783,15 @@ void draw_weather() {
         break;
     }
 
-    TFDrawText(&display, lstr, tmp_x, tmp_y, lcc);  // draw temperature
+    TFDrawText(&display, lstr, tmp_x, tmp_y, lcc);  // draw temperature  
 
-    //weather conditions
-    //-humidity
-    lcc = cc_red;
-    if (humiM < 80)
-      lcc = cc_org;
-    if (humiM < 60)
-      lcc = cc_grn;
-    if (humiM < 40)
-      lcc = cc_blu;
-    if (humiM < 20)
-      lcc = cc_wht;
-
-    // Pad humi to exactly 4 characters
-    humi_lstr = String(humiM) + String(humi_label);
-    switch (humi_lstr.length()) {
-      case 2:
-        humi_lstr = String(humi_lstr) + String("  ");
-        break;
-      case 3:
-        humi_lstr = String(humi_lstr) + String(" ");
-        break;
-    }
-    TFDrawText(&display, humi_lstr, humi_x, humi_y, lcc);  // humidity
+    draw_wind_humidity();
 
     int cc = color_disp;
     cc = color_disp;
 
-    //Draw wind speed and direction
-    draw_wind();
-    wind_humi = 1;  //Reset switch for toggling wind or humidity display
-
     if (String(c_vars[EV_WANI]) == "N") {
-     TFDrawText(&display, weather_text[condM], wtext_x, wtext_y, cc_wtext);
+      TFDrawText(&display, weather_text[codeWT], wtext_x, wtext_y, cc_wtext);
     } else {
       draw_weather_conditions();
     }
@@ -981,7 +1804,7 @@ void draw_date() {
   String lstr = "";
 
   for (int i = 0; i < 5; i += 2) {
-    switch (date_fmt[i]) {
+    switch (c_vars[EV_DATEFMT][i]) {
       case 'D':
         lstr += (day(tnow) < 10 ? " " + String(day(tnow)) : String(day(tnow)));
         if (i < 4)
@@ -1037,10 +1860,10 @@ void draw_animations(int stp) {
   String lstr = "";
   xo = img_x;
   yo = img_y;
-  //0 - unk, 1 - sunny, 2 - cloudy, 3 - overcast, 4 - rainy, 5 - thunders, 6 - snow
   if (use_ani) {
     int *af = NULL;
-    switch (condM) {
+	
+    switch (codeWA) {
       case 1:
         af = suny_ani[stp % 5];
         break;
@@ -1081,13 +1904,14 @@ void draw_animations(int stp) {
   }
 }
 
+
 byte prevhh = 0;
 byte prevmm = 0;
 byte prevss = 0;
 long tnow;
-WiFiClient httpcli;
+//WiFiClient httpcli;
 
-
+/*
 //convert hex letter to value
 char hexchar2code(const char *hb) {
   if (*hb >= 'a')
@@ -1096,320 +1920,18 @@ char hexchar2code(const char *hb) {
     return *hb - 'A' + 10;
   return *hb - '0';
 }
-
-//To find the values they are sandwiched between search and it always ends before "HTTP /"
-//Pidx + ? is length of string searching for ie "?geoloc=" = length 8, pidx + 8
-//pidx2 is end of string location for HTTP /
-void web_server() {
-  httpcli = httpsvr.available();
-  if (httpcli) {
-    char svf = 0, rst = 0;
-    //Read what the browser has sent into a String class and print the request to the monitor
-    String httprq = httpcli.readString();
-    // Looking under the hood
-    // Serial.println (httprq);
-    int pidx = -1;
-    //
-    String httprsp = "HTTP/1.1 200 OK\r\n";
-    httprsp += "Content-type: text/html\r\n\r\n";
-    httprsp += "<!DOCTYPE HTML>\r\n<html>\r\n";
-
-    if ((pidx = httprq.indexOf("GET /datetime/")) != -1) {
-      int pidx2 = httprq.indexOf(" ", pidx + 14);
-      if (pidx2 != -1) {
-        String datetime = httprq.substring(pidx + 14, pidx2);
-        //display.setBrightness (bri.toInt ());
-        int yy = datetime.substring(0, 4).toInt();
-        int MM = datetime.substring(4, 6).toInt();
-        int dd = datetime.substring(6, 8).toInt();
-        int hh = datetime.substring(8, 10).toInt();
-        int mm = datetime.substring(10, 12).toInt();
-        int ss = 0;
-        if (datetime.length() == 14) {
-          ss = datetime.substring(12, 14).toInt();
-        }
-        //void setTime(int hr,int min,int sec,int dy, int mnth, int yr)
-        setTime(hh, mm, ss, dd, MM, yy);
-        ntpsync = 1;
-      }
-    }
-
-    else if (httprq.indexOf("GET /ota/") != -1) {
-      //GET /ota/?otaloc=192.168.2.38%3A8000%2Fespweather.bin HTTP/1.1
-      pidx = httprq.indexOf("?otaloc=");
-      int pidx2 = httprq.indexOf(" HTTP/", pidx);
-      if (pidx2 > 0) {
-        strncpy(c_vars[EV_OTA], httprq.substring(pidx + 8, pidx2).c_str(), LVARS * 3);
-        //debug_print (">ota1:");
-        //debug_println (c_vars[EV_OTA]);
-        char *bc = c_vars[EV_OTA];
-        int ck = 0;
-        //debug_print (">ota2:");
-        //debug_println (bc);
-        //convert in place url %HH excaped chars
-        while (*bc > 0 && ck < LVARS * 3) {
-          if (*bc == '%') {
-            //convert URL chars to ascii
-            c_vars[EV_OTA][ck] = hexchar2code(bc + 1) << 4 | hexchar2code(bc + 2);
-            bc += 2;
-          } else
-            c_vars[EV_OTA][ck] = *bc;
-          //next one
-          //debug_println (c_vars[EV_OTA][ck]);
-          bc++;
-          ck++;
-        }
-        c_vars[EV_OTA][ck] = 0;
-        svf = 1;
-      }
-    }
-    //location
-    else if (httprq.indexOf("GET /geoloc/") != -1) {
-      pidx = httprq.indexOf("?geoloc=");
-      int pidx2 = httprq.indexOf(" HTTP/", pidx);
-      if (pidx2 > 0) {
-        String location = urldecode(httprq.substring(pidx + 8, pidx2).c_str());
-        strncpy(c_vars[EV_GEOLOC], location.c_str(), LVARS * 3);
-        getWeather();
-        draw_weather_conditions();
-        svf = 1;
-      }
-    }
-    //openweathermap.org key
-    else if (httprq.indexOf("GET /owm/") != -1) {
-      pidx = httprq.indexOf("?owmkey=");
-      int pidx2 = httprq.indexOf(" HTTP/", pidx);
-      if (pidx2 > 0) {
-        strncpy(c_vars[EV_OWMK], httprq.substring(pidx + 8, pidx2).c_str(), LVARS * 3);
-        getWeather();
-        draw_weather_conditions();
-        svf = 1;
-      }
-      //
-    } else if (httprq.indexOf("GET /wifi/") != -1) {
-      //GET /wifi/?ssid=ssid&pass=pass HTTP/1.1
-      pidx = httprq.indexOf("?ssid=");
-      int pidx2 = httprq.indexOf("&pass=");
-      String ssid = httprq.substring(pidx + 6, pidx2);
-      pidx = httprq.indexOf(" HTTP/", pidx2);
-      String pass = httprq.substring(pidx2 + 6, pidx);
-      if (connect_wifi(ssid.c_str(), pass.c_str()) == 0) {
-        strncpy(c_vars[EV_SSID], ssid.c_str(), LVARS * 2);
-        strncpy(c_vars[EV_PASS], pass.c_str(), LVARS * 2);
-        svf = 1;
-        //   rst = 1;
-      } else {
-        Serial.println("Wifi Connect failed, will try prior SSID and Password");
-        if (connect_wifi(c_vars[EV_SSID], c_vars[EV_PASS]) == 1)
-          ESP.restart();  //Give up reboot
-      }
-
-    } else if (httprq.indexOf("GET /daylight/on ") != -1) {
-      strcpy(c_vars[EV_DST], "true");
-      NTP.begin(ntpsvr, String(c_vars[EV_TZ]).toInt(), toBool(String(c_vars[EV_DST])));
-      httprsp += "<strong>daylight: on</strong><br>";
-      svf = 1;
-    } else if (httprq.indexOf("GET /daylight/off ") != -1) {
-      strcpy(c_vars[EV_DST], "false");
-      NTP.begin(ntpsvr, String(c_vars[EV_TZ]).toInt(), toBool(String(c_vars[EV_DST])));
-      httprsp += "<strong>daylight: off</strong><br>";
-      svf = 1;
-    } else if (httprq.indexOf("GET /metric/on ") != -1) {
-      strcpy(c_vars[EV_METRIC], "Y");
-      httprsp += "<strong>metric: on</strong><br>";
-      getWeather();
-      draw_weather_conditions();
-      svf = 1;
-    } else if (httprq.indexOf("GET /metric/off ") != -1) {
-      strcpy(c_vars[EV_METRIC], "N");
-      httprsp += "<strong>metric: off</strong><br>";
-      getWeather();
-      draw_weather_conditions();
-      svf = 1;
-    } else if ((pidx = httprq.indexOf("GET /brightness/")) != -1) {
-      int pidx2 = httprq.indexOf(" ", pidx + 16);
-      if (pidx2 != -1) {
-        String bri = httprq.substring(pidx + 16, pidx2);
-        strcpy(c_vars[EV_BRIGHT], bri.c_str());
-        display_updater();
-        ntpsync = 1;  //force full redraw
-        svf = 1;
-      }
-    } else if ((pidx = httprq.indexOf("GET /timezone/")) != -1) {
-      int pidx2 = httprq.indexOf(" ", pidx + 14);
-      if (pidx2 != -1) {
-        String tz = httprq.substring(pidx + 14, pidx2);
-        strcpy(c_vars[EV_TZ], tz.c_str());
-        NTP.begin(ntpsvr, String(c_vars[EV_TZ]).toInt(), toBool(String(c_vars[EV_DST])));
-        httprsp += "<strong>timezone:" + tz + "</strong><br>";
-        svf = 1;
-      } else {
-        httprsp += "<strong>!invalid timezone!</strong><br>";
-      }
-    } else if (httprq.indexOf("GET /weather_animation/on ") != -1) {
-      strcpy(c_vars[EV_WANI], "Y");
-      httprsp += "<strong>Weather Animation: on</strong><br>";
-      TFDrawText(&display, "        ", wtext_x, wtext_y, 0);
-      getWeather();
-      draw_weather_conditions();
-      ntpsync = 1;
-      svf = 1;
-    } else if (httprq.indexOf("GET /weather_animation/off ") != -1) {
-      strcpy(c_vars[EV_WANI], "N");
-      httprsp += "<strong>Weather Animation: off</strong><br>";
-      getWeather();
-      draw_weather_conditions();
-      ntpsync = 1;
-      svf = 1;
-    } else if (httprq.indexOf("GET /military/on ") != -1) {
-      strcpy(c_vars[EV_24H], "Y");
-      httprsp += "<strong>Military Time: on</strong><br>";
-      prevhh = -1;
-      svf = 1;
-    } else if (httprq.indexOf("GET /military/off ") != -1) {
-      strcpy(c_vars[EV_24H], "N");
-      httprsp += "<strong>Military Time: off</strong><br>";
-      prevhh = -1;
-      svf = 1;
-    }
-    //Reset Config file
-    else if (httprq.indexOf("GET /reset_config_file ") != -1) {
-      init_config_vars();
-      vars_write();
-      vars_read();
-      httprsp += "<strong>Config file resetted</strong><br>";
-    } else if ((pidx = httprq.indexOf("GET /colorpalet/")) != -1) {
-      int pidx2 = httprq.indexOf(" ", pidx + 16);
-      if (pidx2 != -1) {
-        String pal = httprq.substring(pidx + 16, pidx2);
-        strcpy(c_vars[EV_PALET], pal.c_str());
-        httprsp += "<strong>Color Palet:" + pal + "</strong><br>";
-        svf = 1;
-        rst = 1;
-      }
-    }
-
-    //
-    httprsp += "<br>MORPH CLOCK CONFIG<br>";
-    httprsp += "<br>Use the following configuration links<br>";
-    httprsp += "<a href='/daylight/on'>Daylight Savings on</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/daylight/off'>Daylight Savings off</a><br><br>";
-    httprsp += "<a href='/military/on'>Military Time on</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/military/off'>Military Time off</a><br><br>";
-    httprsp += "<a href='/metric/on'>Metric System</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/metric/off'>Imperial System</a><br><br>";
-    httprsp += "<a href='/weather_animation/on'>Weather Animation on</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/weather_animation/off'>Weather Animation off</a><br><br>";
-
-    httprsp += "<a href='/timezone/-5'>East Coast USA</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/timezone/-6'>Central USA</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/timezone/-7'>Mountain USA</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/timezone/-8'>Pacific USA</a><br>";
-    httprsp += "use /timezone/x for timezone 'x'<br><br>";
-
-    httprsp += "<a href='/colorpalet/1'>Clock Color Cyan</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/colorpalet/2'>Clock Color Red</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/colorpalet/3'>Clock Color Blue</a>&nbsp &nbsp &nbsp<br>";
-    httprsp += "<a href='/colorpalet/4'>Clock Color Yellow</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/colorpalet/5'>Clock Color Bright Blue</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/colorpalet/6'>Clock Color Orange</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/colorpalet/7'>Clock Color Green</a>&nbsp &nbsp &nbsp<br><br>";
-
-    httprsp += "<a href='/brightness/70'>Brightness 70</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/brightness/35'>Brightness 35</a>&nbsp &nbsp &nbsp";
-    httprsp += "<a href='/brightness/0'>Turn off display</a><br>";
-    httprsp += "Use /brightness/x for display brightness 'x'<br>";
-
-    //openweathermap.org
-    httprsp += "<br>openweathermap.org API key<br>";
-    httprsp += "<form action='/owm/'>"
-               "http://<input type='text' size=\"35\" name='owmkey' value='"
-               + String(c_vars[EV_OWMK]) + "'>(hex string)<br>"
-                                           "<input type='submit' value='set OWM key'></form><br>";
-
-    //geo location
-    httprsp += "<br>Location: City,Country<br>";
-    httprsp += "<form action='/geoloc/'>"
-               "http://<input type='text' name='geoloc' value='"
-               + String(c_vars[EV_GEOLOC]) + "'>(e.g.: New York City,NY)<br>"
-                                             "<input type='submit' value='set Location'></form><br>";
-
-    //GQ
-    //I have no idea what someone intended for this to do?
-    //EV_OTA is not accessed in the code for any routines
-    //I left the vars in place but will comment out in the web interface since it does nothing
-    //
-    //OTA
-    //    httprsp += "<br>OTA update configuration (every minute)<br>";
-    //    httprsp += "<form action='/ota/'>" \
-//      "http://<input type='text' name='otaloc' value='" + String(c_vars[EV_OTA]) + "'>(ip address:port/filename)<br>" \
-//      "<input type='submit' value='set OTA location'></form><br>";
-
-    httprsp += "<br>wifi configuration<br>";
-    httprsp += "<form action='/wifi/'>"
-               "ssid:<input type='text' name='ssid'>"
-               + String(c_vars[EV_SSID]) + "<br>"
-                                           "pass:<input type='text' name='pass'>"
-               + String(c_vars[EV_PASS]) + "<br>"
-                                           "<input type='submit' value='set wifi'></form><br>";
-
-   
-    //Reset config file  (You probably will never need to but it's really handy for debugging)
-    httprsp += "<a href='/reset_config_file'>Reset Config file to defaults</a><br><br>";
-
-    httprsp += "Current Configuration<br>";
-    httprsp += "Daylight: " + String(c_vars[EV_DST]) + "<br>";
-    httprsp += "Military: " + String(c_vars[EV_24H]) + "<br>";
-    httprsp += "Metric: " + String(c_vars[EV_METRIC]) + "<br>";
-    httprsp += "Timezone: " + String(c_vars[EV_TZ]) + "<br>";
-    httprsp += "Weather Animation: " + String(c_vars[EV_WANI]) + "<br>";
-    httprsp += "Color palette: " + String(c_vars[EV_PALET]) + "<br>";
-    httprsp += "Brightness: " + String(c_vars[EV_BRIGHT]) + "<br>";
-    httprsp += "<br><a href='/'>home</a><br>";
-    httprsp += "<br>"
-               "<script language='javascript'>"
-               "var today = new Date();"
-               "var hh = today.getHours();"
-               "var mm = today.getMinutes();"
-               "if(hh<10)hh='0'+hh;"
-               "if(mm<59)mm=1+mm;"
-               "if(mm<10)mm='0'+mm;"
-               "var dd = today.getDate();"
-               "var MM = today.getMonth()+1;"
-               "if(dd<10)dd='0'+dd;"
-               "if(MM<10)MM='0'+MM;"
-               "var yyyy = today.getFullYear();"
-               "document.write('set date and time to <a href=/datetime/'+yyyy+MM+dd+hh+mm+'>'+yyyy+'.'+MM+'.'+dd+' '+hh+':'+mm+':00</a><br>');"
-               "document.write('using current date and time '+today);"
-               "</script>";
-    httprsp += "</html>\r\n";
-    httpcli.flush();         //clear previous info in the stream
-    httpcli.print(httprsp);  // Send the response to the client
-    delay(1);
-    //save settings?
-    if (svf) {
-      if (vars_write() > 0)
-        Serial.println("Variables stored");
-      else
-        Serial.println("Variables storing failed");
-    }
-
-    if (rst)
-      resetclock();
-  }
-}
-//
-//Web server end
-//
+*/
 
 //Restart Clock
 void resetclock() {
+  Serial.println("************Reset clock called*************");
   display.fillScreen(0);
   TFDrawText(&display, String("  RESTART  "), 10, 9, cc_blu);
-  TFDrawText(&display, String("MORPH CLOCK"), 10, 16, cc_blu);
-  delay(2000);
-  ESP.reset();
+  TFDrawText(&display, String("MORPH CLOCKQ"), 10, 16, cc_blu);
+  delay(3000);
+  ESP.restart();
 }
+
 
 void draw_am_pm() {
   // this sets AM/PM display and is disabled when military time is used
@@ -1447,9 +1969,6 @@ void loop() {
   static int last = 0;
   static int cm;
 
-  //handle web server requests
-  web_server();
-
   //animations?
   cm = millis();
   if ((cm - last) > ani_speed)  // animation speed
@@ -1461,6 +1980,7 @@ void loop() {
 
   tnow = now();
   hh = hour(tnow);
+  hh24 = hh;        //Keep 24hr format for internal checks
   mm = minute(tnow);
   ss = second(tnow);
   //
@@ -1479,8 +1999,7 @@ void loop() {
     //clear screen
     display_updater();
     display.fillScreen(0);
-    Serial.println("Display cleared");
-
+ 
     //date and weather
     draw_date();
     draw_am_pm();
@@ -1525,17 +2044,11 @@ void loop() {
 
       prevss = ss;
       //refresh weather at 31sec in the minute
-      if (ss == 31 && ((mm % weather_refresh) == 0)) {
+      if ( ss == 31 && ( ((mm % weather_refresh) == 0) || ForceWeatherCheck) ) {
         getWeather();
         morph_off = 0;  //Currently not using, set to 0 this was to address weather delay
       } else if ((ss % 10) == 0) {  // Toggle display every 10 seconds between wind and humidity
-        if (wind_humi == 1) {
-          TFDrawText(&display, humi_lstr, wind_x, wind_y, cc_wind);
-          wind_humi = 0;
-        } else {
-          draw_wind();
-          wind_humi = 1;
-        }
+          draw_wind_humidity();
       }
     }
     //minutes
