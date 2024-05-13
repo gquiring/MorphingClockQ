@@ -1,41 +1,18 @@
-Make sure from the board manager you select is 2.7.x for the ESP8266, any 3.x version will not compile.
+This is a remix of Harry's Morphing Clock that includes weather like temperature, wind and humidity.  The project requires an ESP8266.  All other hardware required is in the .ino source.  
 
-I made a zip file with all the libraries required for this project on [Google Drive](https://drive.google.com/file/d/1cQjsZGft_tuw0jCCs2JDoIu5awqr7lbc/)
+If you already have the Morphing Clock installed prior to May 2024 you must wipe your flash memory.  From the Tools menu, select Erase Flash-All flash settings.  The config file has changed requiring this one time only to wipe it. 
 
-Visit [OpenWeather](https://openweathermap.org/) to get a free account for your weather API key.  This is mandatory for the weather to work.  
+Please note when installing the board manager for the ESP8266 you must install the old version 2.7.4.  Newer versions will NOT compile.
 
-Build instructions are on [Youtube](https://youtu.be/5IvTE6gUA08)
+Due to the change with OpenWeatherMap requiring a new API call and your account must have a credit card on file ((starting June 2024) I have desided to discontinue using their service.  The weather code has been completely rewritten to be more flexible with multiple weather services.  It currently supports WeatherAPI, WeatherBit.io, PirateWeather, OpenMeteo and WeatherUnlocked.  I can add more weather services as long as they don't require a SSL connection and the JSON string is not huge.  
 
-Edit the paramsEDITMEFIRST.h file (which needs to be renamed to params.h).  You must setup your SSID and password.  
+Edit the paramsEDITMEFIRST.h file (which needs to be renamed to params.h). You must setup your SSID, password and weather location.
 
-Daylight savings time not working for USA locations.  It requires editing the NTPClientLib (more details in the .ino).  
+I highly recommend starting with weather service OpenMeteo which is service 4.  This service requires no account or API key.  It's the easiest way to get your weather setup.  Depending on the weather service you use your location can be zip/postal code or lat/long.  
 
-Fixed the morphing problem when the hour changed, it now morphs all the digits, much cooler looking.
+Daylight savings time not working for USA locations. It requires editing the NTPClientLib (more details in the .ino).
 
-Added/modified the following features:
-Fixed the checking the weather delay which in turn fixed the morphing problem with the seconds.
-
-Display weather text ie - Cloudy instead of using icons, I found the icons confusing to decipher.  It's on toggle, you can choose what you like.
-
-Show wind and humidity alternately displayed every 10 seconds.
-
-Day of week to the dateline.  FYI it's hardcoded for Sun being the first day of week.
-
-Replaced 0 wind with CALM display.
-
-Color palette options.  You can pick from several different palettes on the web interface.
-
-Leading zero removed from the date display.
-
-Modifed the Tiny font for the 1 digit.  It was a straight line down and looked weird.
-
-Added urldecode function to remove the special characters from web entries.  They were being written to the config file which caused issues.
-
-Lots of new options on the web interface.
-
-Fixed the config file getting corrupted.  Overall this area needed a lot of work, the code was not referencing the correct variables.   
-
-Modifed the NTP code in the main loop to compile, the version I had refused to compile with any version of NTPClientLib I tried.
+Instead of searching for all the libraries I made a Zip file on Google Drive for an easier install.  The link is in the .ino source.  
 
 Credits:
 This version of Hari's Morphing clock is from several remix versions including timz3818. They all did a nice job enhancing this cool clock - Thank you!
