@@ -12,6 +12,8 @@ I highly recommend starting with weather service OpenMeteo which is service 4.  
 
 Daylight savings time not working for USA locations. It requires editing the NTPClientLib (more details in the .ino).
 
+New feature added - Day / Night mode.
+
 Instead of searching for all the libraries I made a Zip file on Google Drive for an easier install.  The link is in the .ino source.  
 
 Build instuctions are on youtube.  The Arduino part is out of date and will need updates.  
