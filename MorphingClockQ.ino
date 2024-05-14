@@ -13,6 +13,9 @@ this remix by timz3818 adds am/pm, working night mode (change brightness and col
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
+Update: 5/14/2024
+Chnaged the web code to a script for save function to stay on the same URL
+
 Update: 5/11/2024
 OpenWeatherMap depreciated their 2.5 API. The 3.0 call requires a credit card on file to use the 'free' service.
 If you go over the allotted amount of API calls per month you will be charged. I decided to discontinue using
@@ -367,8 +370,8 @@ typedef enum e_vars {
 
 AsyncWebServer server(80);
 
-String index_html = "<html><head><title>Morphing ClockQ Configuration Setup></title></head><body>\
-<form action='/save' method='post'>\
+String index_html = "<html><body>\
+<form id='configForm'>\
 SSID:     <input type='text' name='wifi_ssid' value='%WIFI_SSID%' maxlength='50'><br>\
 Password: <input type='password' name='wifi_pass' value='%WIFI_PASS%' maxlength='50'><br><br>\
 <div>\
@@ -429,12 +432,23 @@ Define:          <input type='text' name='wdefine' value='%WDEFINE%'>\
 Metric (Y/N):    <input type='text' name='u_metric' value='%U_METRIC%' maxlength='1'><br>\
 <style>input[type='text'][maxlength='1'] {width: calc(1ch + 15px);}</style>\
 Weather Animation (Y/N): <input type='text' name='w_animation' value='%W_ANIMATION%' maxlength='1'><br><br>\
-<input type='submit' value='Save'>\
-</form></body></html>";
+<input type='button' onclick='saveSettings()' value='Save'>\
+</form>\
+<script>\
+function saveSettings() {\
+var form = document.getElementById('configForm');\
+var formData = new FormData(form);\
+fetch('/save', {\
+method: 'POST',\
+body: formData\
+}).then(response => {\
+}).catch(error => {\
+});\
+}\
+</script>\
+</body></html>";
 
-//<input type='submit' value='Save'>\
-//<input type='button' onclick='saveSettings()' value='Save'>\
-// Handle root url
+
 
 void handleRoot(AsyncWebServerRequest *request) {
   String page = index_html;
