@@ -13,8 +13,15 @@ this remix by timz3818 adds am/pm, working night mode (change brightness and col
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
+Update: 5/15/2024
+Yesterday's change ended up being a very strange mess.  When I tested I was refreshing the page, I never opened a new tab in the browser
+Today when I opened a new tab and tried to load the config page, it would not load the entire page and duplicated the time zone fields
+ChatGPT was running me around circles, I have to use ChatGPT because I know nothing about HTML
+It finally said I had a span not with a corresponding /span.  I reviewed the code multiple times could not find it.
+I gave up and removed all the div, span and style formatting, it works now
+
 Update: 5/14/2024
-Chnaged the web code to a script for save function to stay on the same URL
+Changed the web code to a script for save function to stay on the same URL
 
 Update: 5/11/2024
 OpenWeatherMap depreciated their 2.5 API. The 3.0 call requires a credit card on file to use the 'free' service.
@@ -369,8 +376,45 @@ typedef enum e_vars {
 };
 
 AsyncWebServer server(80);
+String index_html = "<!DOCTYPE html><html><body>\
+<form id='configForm'>\
+<h2>Morphing ClockQ Configuration</h2>\
+SSID:     <input type='text' name='wifi_ssid' value='%WIFI_SSID%' maxlength='50'><br>\
+Password: <input type='password' name='wifi_pass' value='%WIFI_PASS%' maxlength='50'><br><br>\
+Timezone: <input type='text' name='timezone' value='%TIMEZONE%' maxlength='3'><br>\
+24 Hour format: <input type='text' name='military' value='%MILITARY%'><br>\
+Date Format: <input type='text' name='date_fmt' value='%DATE_FMT%'><br>\
+Daylight Savings Time (true/false): <input type='text' name='dst_sav' value='%DST_SAV%'><br><br>\
+<p>1=Cyan, 2=Red, 3=Blue, 4=Yellow, 5=Bright Blue, 6=Orange, 7=Green</p>\
+Color Palette: <input type='number' name='c_palet' value='%C_PALET%' maxlength='3' min='1' max='7'><br>\
+Brightness: <input type='number' name='brightness' value='%BRIGHTNESS%' maxlength='2' min='20' max='70'>\
+<p>Dim the display for night time hours in 24hr format, enter 0 in both fields to disable</p>\
+Night Start: <input type='number' name='nightStart' value='%NIGHT_START%' maxlength='2' min='0' max='24'><br>\
+Night End: <input type='number' name='nightEnd' value='%NIGHT_END%' maxlength='2' min='0' max='24'><br><br>\
+<p>Read the weather docs for all the details - weather.pdf</p>\
+<p>1=WeatherAPI.com, 2=WeatherBit.io, 3=PirateWeather.net, 4=OpenMeteo.io, 5=WeatherUnlocked</p>\
+Weather Service: <input type='number' name='weatherservice' value='%WEATHER_SERVICE%' maxlength='3' min='1' max='9'><br>\
+API Key:         <input type='text' name='apiKey' value='%API_KEY%' maxlength='50'><br>\
+Postal Code:     <input type='text' name='postal_code' value='%POSTAL_CODE%'><br>\
+Country Code:    <input type='text' name='country_code' value='%COUNTRY_CODE%'><br>\
+Latitude:        <input type='text' name='latitude' value='%LATITUDE%'><br>\
+Longitude:       <input type='text' name='longitude' value='%LONGITUDE%'><br>\
+Define:          <input type='text' name='wdefine' value='%WDEFINE%'><br>\
+Metric (Y/N):    <input type='text' name='u_metric' value='%U_METRIC%' maxlength='1'><br>\
+Weather Animation (Y/N): <input type='text' name='w_animation' value='%W_ANIMATION%' maxlength='1'><br><br>\
+<input type='button' onclick='saveSettings()' value='Save'>\
+</form>\
+<script>\
+function saveSettings() {\
+var form = document.getElementById('configForm');\
+var formData = new FormData(form);\
+fetch('/save', {method: 'POST',body: formData}).then(response => {}).catch(error => {});\
+}\
+</script>\
+</body></html>";
 
-String index_html = "<html><body>\
+/*
+String index_html = "<!DOCTYPE html><html><body>\
 <form id='configForm'>\
 SSID:     <input type='text' name='wifi_ssid' value='%WIFI_SSID%' maxlength='50'><br>\
 Password: <input type='password' name='wifi_pass' value='%WIFI_PASS%' maxlength='50'><br><br>\
@@ -407,6 +451,8 @@ Brightness: <input type='number' name='brightness' value='%BRIGHTNESS%' maxlengt
 <div>\
 <style>input[type='number'][maxlength='2'] {width: calc(4ch + 15px);}</style>\
 Night Start: <input type='number' name='nightStart' value='%NIGHT_START%' maxlength='2' min='0' max='24'><br>\
+</div>\
+<div>\
 <style>input[type='number'][maxlength='2'] {width: calc(4ch + 15px);}</style>\
 Night End: <input type='number' name='nightEnd' value='%NIGHT_END%' maxlength='2' min='0' max='24'><br><br>\
 </div>\
@@ -428,27 +474,39 @@ Longitude:       <input type='text' name='longitude' value='%LONGITUDE%'><br>\
 <div>\
 Define:          <input type='text' name='wdefine' value='%WDEFINE%'>\
 <span> For most weather services this field will not be used</span><br>\
+</div>\
+<div>\
 <style>input[type='text'][maxlength='1'] {width: calc(1ch + 15px);}</style>\
 Metric (Y/N):    <input type='text' name='u_metric' value='%U_METRIC%' maxlength='1'><br>\
+</div>\
+<div>\
 <style>input[type='text'][maxlength='1'] {width: calc(1ch + 15px);}</style>\
 Weather Animation (Y/N): <input type='text' name='w_animation' value='%W_ANIMATION%' maxlength='1'><br><br>\
+</div>\
 <input type='button' onclick='saveSettings()' value='Save'>\
 </form>\
 <script>\
 function saveSettings() {\
+console.log('saveSettings() function called');\
 var form = document.getElementById('configForm');\
 var formData = new FormData(form);\
-fetch('/save', {\
-method: 'POST',\
-body: formData\
-}).then(response => {\
-}).catch(error => {\
-});\
+fetch('/save', {method: 'POST',body: formData}).then(response => {}).catch(error => {});}\
 }\
 </script>\
 </body></html>";
 
+*/
 
+/*
+<script>\
+function saveSettings() {\
+console.log('saveSettings() function called');\
+var form = document.getElementById('configForm');\
+var formData = new FormData(form);\
+fetch('/save', {method: 'POST',body: formData}).then(response => {}).catch(error => {});}\
+}\
+</script>\
+*/
 
 void handleRoot(AsyncWebServerRequest *request) {
   String page = index_html;
@@ -528,15 +586,9 @@ void handleSave(AsyncWebServerRequest *request) {
     }
   }
 
-/* Not working
- //Hidden option to remove the config file, type 'reset' into the time zone field
-  if (String(c_vars[EV_TZ]) == "reset") {
-    vars_remove();
-    ESP.restart();
-  }
-*/
   vars_write();
   request->send(200, "text/plain", "Settings saved");
+  delay(1000);
   ESP.restart();  //Always restart device after changes
 
 
@@ -553,7 +605,6 @@ void web_server() {
   
   server.on("/", HTTP_GET, handleRoot);
   server.on("/save", HTTP_POST, handleSave);
-
   server.onNotFound(notFound);
   server.begin();
 }
@@ -870,6 +921,9 @@ int connect_wifi(String n_wifi, String n_pass) {
   return 0;
 }
 
+//
+//SETUP BEGIN
+//
 void setup() {
   Serial.begin(9600);
   while (!Serial)
