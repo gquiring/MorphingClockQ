@@ -1,22 +1,13 @@
 /*
 Thanks to all who made this project possible!
 
-remix from HarryFun's great Morphing Digital Clock idea https://github.com/hwiguna/HariFun_166_Morphing_Clock
-awesome build tutorial here:https://www.instructables.com/id/Morphing-Digital-Clock/
-
-openweathermap compatibility added thanks to Imirel's remix https://github.com/lmirel/MorphingClockRemix
-some bits and pieces from kolle86's MorphingClockRemixRemix https://github.com/kolle86/MorphingClockRemixRemix
-small seconds by Trenck
-
-this remix by timz3818 adds am/pm, working night mode (change brightness and colors), auto dissapearing first digit, and lower brightness icons
-
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
 Update: 5/15/2024
 Yesterday's change ended up being a very strange mess.  When I tested I was refreshing the page, I never opened a new tab in the browser
 Today when I opened a new tab and tried to load the config page, it would not load the entire page and duplicated the time zone fields
-ChatGPT was running me around circles, I have to use ChatGPT because I know nothing about HTML
+ChatGPT was running me around in circles, I have to use ChatGPT because I know nothing about HTML
 It finally said I had a span not with a corresponding /span.  I reviewed the code multiple times could not find it.
 I gave up and removed all the div, span and style formatting, it works now
 
@@ -98,7 +89,9 @@ Web logic was broken for changing SSID and Password, it never checked to see if 
 Added Metric/Imperial options to the web interface
 Added brightness option to config file and web interface
 Added Color Palettes to web and config file
-Commented out OTA feature for the web interaface, the code is not excuted anywhere in the routines, not sure what it was for
+Commented out OTA feature for the web interface, the code is not executed anywhere in the routines, not sure what it was for
+
+
 =====================================================================
 ===  INSTALLATION INSTRUCTIONS  ===
 =====================================================================
@@ -149,8 +142,16 @@ https://www.amazon.com/dp/B07GD2BWPY
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 Provided 'AS IS', use at your own risk
- */
+ 
+remix from HarryFun's great Morphing Digital Clock idea https://github.com/hwiguna/HariFun_166_Morphing_Clock
+awesome build tutorial here:https://www.instructables.com/id/Morphing-Digital-Clock/
 
+openweathermap compatibility added thanks to Imirel's remix https://github.com/lmirel/MorphingClockRemix
+some bits and pieces from kolle86's MorphingClockRemixRemix https://github.com/kolle86/MorphingClockRemixRemix
+small seconds by Trenck
+
+this remix by timz3818 adds am/pm, working night mode (change brightness and colors), auto dissapearing first digit, and lower brightness icons
+*/
 
 // we need these:
 #include <TimeLib.h>
@@ -164,7 +165,7 @@ Provided 'AS IS', use at your own risk
 #include "TinyFont.h"
 #include "Digit.h"
 #include "Digitsec.h"
-#include "params.h"
+#include "params.h"    //File not found?  You have rename paramsEDITTHISFIRST.h and rename to params.h
 
 
 //ESP8266 setup
@@ -200,15 +201,6 @@ const char ntpsvr[] = "time.google.com";
 // See PxMAtrix documentation for more info regarding getting your LED matrix working
 //
 // double reset will not work, set WIFI info in params.h instead
-//
-//once connected to WIFI, you can change time zone by going to:
-// http://clock.ip.address/timezone/desired_offset
-// ex. http://clock.ip.address/timezone/-8 sets GMT -8
-//
-// the default icons are dim. you can use the commented out ones instead if you want brighter icons
-//
-// Known issues: the display will freeze for 5-10sec when weather info is updated
-
 
 
 
@@ -602,7 +594,6 @@ void notFound(AsyncWebServerRequest *request) {
 
 
 void web_server() {
-  
   server.on("/", HTTP_GET, handleRoot);
   server.on("/save", HTTP_POST, handleSave);
   server.onNotFound(notFound);
@@ -1039,9 +1030,6 @@ void getWeather() {
    if ( apikeys[atoi(c_vars[EV_WSERVICE]) - 1].length() != 0) {
      String apiKey = apikeys[ atoi(c_vars[EV_WSERVICE]) - 1 ] ;
      strcpy(c_vars[EV_APIKEY], apiKey.c_str());
-
-//     Serial.print("Using Stored APIKEY:");
-//     Serial.println(c_vars[EV_APIKEY]);
    }
 
   if (!sizeof(apiKey) && String(c_vars[EV_WSERVICE]) != "4") {  //Open-meteo does not require API key
