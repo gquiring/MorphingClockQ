@@ -23,4 +23,7 @@ Credits:
 This version of Hari's Morphing clock is from several remix versions including timz3818. They all did a nice job enhancing this cool clock - Thank you!
 
 https://github.com/gquiring/MorphingClockQ/blob/main/morphclock.png
-![Alt text](/main/morphclock.png/img.jpg?raw=true "Optional Title")
+
+![Alt text](/relative/path/to/img.jpg?raw=true "Optional Title")
+
+![Alt text](https://github.com/gquiring/MorphingClockQ/blob/main/morphclock.png?raw=true "Optional Title")
