@@ -14,6 +14,8 @@ Daylight savings time not working for USA locations. It requires editing the NTP
 
 New feature added - Day / Night mode.
 
+The web page has been entirely redone using the Async library.  It's much easier to main and modify the HTML. 
+
 Instead of searching for all the libraries I made a Zip file on Google Drive for an easier install.  The link is in the .ino source.  
 
 Build instuctions are on youtube.  The Arduino part is out of date and will need updates.  
