@@ -18,8 +18,12 @@ The web page has been entirely redone using the Async library.  It's much easier
 
 Instead of searching for all the libraries I made a Zip file on Google Drive for an easier install.  The link is in the .ino source.  
 
-Build instuctions are on youtube.  The Arduino part is out of date and will need updates.  
+Hardware instuctions are on youtube.  The Arduino part is out of date use the below video.
 https://youtu.be/5IvTE6gUA08
+
+Software only instuctions (IDE, libraries, params.h)
+https://youtu.be/_MmN9ZMG3VI
+
 
 Credits:
 This version of Hari's Morphing clock is from several remix versions including timz3818. They all did a nice job enhancing this cool clock - Thank you!
