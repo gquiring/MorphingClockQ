@@ -4,6 +4,9 @@ Thanks to all who made this project possible!
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
+Update: 5/19/2024
+No code changes, I finished the new Youtube vidoes and updated all the links .
+
 Update: 5/15/2024
 Yesterday's change ended up being a very strange mess.  When I tested I was refreshing the page, I never opened a new tab in the browser
 Today when I opened a new tab and tried to load the config page, it would not load the entire page and duplicated the time zone fields
@@ -95,16 +98,17 @@ Commented out OTA feature for the web interface, the code is not executed anywhe
 =====================================================================
 ===  INSTALLATION INSTRUCTIONS  ===
 =====================================================================
-Youtube: https://youtu.be/5IvTE6gUA08
+Youtube videos.  Two videos have been made, part 1 is the hardware and part 2 is the Arduino software
+Part 1, how to build and wire the RGB board:
+https://youtu.be/aNSt-cKgf9Y
 
-If you don't want to manually download the libraries I have them all in a zip file
-https://drive.google.com/file/d/1yFphQR7dkwSFQQPh21kPAiotAsr-qphc/view?usp=sharing
-
+Part 2, how to build and compile the program:
+https://youtu.be/_MmN9ZMG3VI
 
 
 copy paramsEDITTHISFIRST.h to params.h
 Edit params.h and fill in your SSID, Password and other settings
-Required libraries to compile:
+Required libraries to compile:  (Recommend you use the Google drive link below)
 AdaFruit GFX Library v1.16.0 (Install all dependancies)
 PxMatrix LED Matrix Library by Dominic Buchstaller v1.8.1
 Wifi Manager
@@ -113,9 +117,19 @@ Time by Michael Margolis 1.6.1
 ArduinoJson by Benoit Blanchon 7.0.4
 ESP Async Webserver by Me-No-Dev 1.2.3
 
+Download the Arduino IDE:
+https://www.arduino.cc/en/software
+
+If you don't want to manually download the libraries I have them all in a zip file
+https://drive.google.com/file/d/1yFphQR7dkwSFQQPh21kPAiotAsr-qphc/view?usp=sharing
+
 From the File, Preferences menu, install this additional Link in the board
 Manager URL option:
 http://arduino.esp8266.com/stable/package_esp8266com_index.json
+
+If you can't see the COM port on Windows 11 try this driver, it worked for me:
+https://sparks.gogo.co.nz/assets/_site_/downloads/CH34x_Install_Windows_v3_4.zip
+
 
 From the IDE Tools menu, Board Manager select ESP8266 2.7.4 anything 3.0 or greater won't compile  <<<<<<<READ THIS CLOSELY!!!!!!!!!!!!!!!!!!!!!!
 
@@ -165,7 +179,7 @@ this remix by timz3818 adds am/pm, working night mode (change brightness and col
 #include "TinyFont.h"
 #include "Digit.h"
 #include "Digitsec.h"
-#include "params.h"    //File not found?  You have rename paramsEDITTHISFIRST.h and rename to params.h
+#include "params.h"    //File not found?  You have to rename paramsEDITTHISFIRST.h to params.h
 
 
 //ESP8266 setup
