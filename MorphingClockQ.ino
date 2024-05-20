@@ -5,7 +5,7 @@ This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
 Update: 5/19/2024
-No code changes, I finished the new Youtube vidoes and updated all the links .
+No code changes, I finished the new Youtube vidoes and updated all the links.  Updated Google Drive Link.  
 
 Update: 5/15/2024
 Yesterday's change ended up being a very strange mess.  When I tested I was refreshing the page, I never opened a new tab in the browser
@@ -121,7 +121,7 @@ Download the Arduino IDE:
 https://www.arduino.cc/en/software
 
 If you don't want to manually download the libraries I have them all in a zip file
-https://drive.google.com/file/d/1yFphQR7dkwSFQQPh21kPAiotAsr-qphc/view?usp=sharing
+https://drive.google.com/file/d/1royuv-_O-ehIjqTNLIoRkp83xcF8EJH0/view?usp=sharing
 
 From the File, Preferences menu, install this additional Link in the board
 Manager URL option:
