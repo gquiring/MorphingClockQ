@@ -3,6 +3,9 @@ Thanks to all who made this project possible!
 
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
+Update: 5/20/2024
+Added isDay flag for night time mode animation.  The issue was the animation will show the sunny icon at night time, it needs to know day vs night.
+OpenWeatherMap used different codes for night time, these weather services do not.  OpenMeteo, WeatherAPI and WeatherBit support isDay to determine day/night.  
 
 Update: 5/19/2024
 No code changes, I finished the new Youtube vidoes and updated all the links.  Updated Google Drive Link.  
@@ -326,9 +329,9 @@ int wind_humi = 0;   //Toggle display switch for Wind or Humidty
 bool drawWeather = false;
 int lcc;
 String wind_direction[10] = { "  ", "N ", "NE", "E ", "SE", "S ", "SW", "W ", "NW", "N " };
-String weather_text[26] = {"        ","CLEARSKY","P-CLOUDY","OVERCAST","  RAIN  ","T-STORMS","  SNOW  ","  HAZY  "," CLEAR  "," FOGGY  "," CLOUDY ","BLIZZARD",
-                           " Misty  ", "FLURRIES", "  SLEET ", "FRZ RAIN", " SHOWER ", "DRIZZLE ", "  HAIL  ", "  SMOKE ", "SANDDUST", "FRZ FOG ", "FRZ DRIZ", "SNOWRAIN", "THUNDER ",
-                           "ICE PELT" };
+String weather_text[27] = {"        ","CLEARSKY","P-CLOUDY","OVERCAST","  RAIN  ","T-STORMS","  SNOW  ","  HAZY  "," CLEAR  "," FOGGY  "," CLOUDY ","BLIZZARD",
+                           " MISTY  ", "FLURRIES", "  SLEET ", "FRZ RAIN", " SHOWER ", "DRIZZLE ", "  HAIL  ", "  SMOKE ", "SANDDUST", "FRZ FOG ", "FRZ DRIZ", "SNOWRAIN", "THUNDER ",
+                           "ICE PELT", " SUNNY  " };
 
 String weatherserver = "";
 bool ForceWeatherCheck = false; //If unable to connect to weather service don't wait for the next check interval
@@ -345,6 +348,7 @@ int wind_dir = -10000;
 
 int codeWA = -1;
 int codeWT = 0;
+int isDay = -10000;
 int weatherCode;
 String tmp_line = "";  
 String condS = "";
@@ -945,8 +949,8 @@ void setup() {
   TFDrawText(&display, String("  STARTING UP  "), 0, 10, cc_blu);
 
   //Use this for serial console delay to see all serial.prints for debugging
-  //Serial.println("Waiting for input from keyboard before continuing .....");
-  //while (Serial.available() == 0 ) {}
+  Serial.println("Waiting for input from keyboard before continuing .....");
+  while (Serial.available() == 0 ) {}
  
 
   Serial.println("Setup begin");
@@ -1028,17 +1032,19 @@ void getWeather() {
   humiM = -10000;
   wind_dir = -10000;
   wind_speed = -10000;
+  isDay = -10000;
   float float_tmp;
   
   bool latlong;
 
   ForceWeatherCheck = false;  //If we don't get a valid response override the interval for checking the weather
   bool noTemp = false;
+  String pod = "";
   String uom = "";
   String cord = "";
   String url = "";
   String loc = "";
-  String WeatherTXT = "";
+   String WeatherTXT = "";
   
   //If the weather API keys are in the array it will use them instead of the config file
    if ( apikeys[atoi(c_vars[EV_WSERVICE]) - 1].length() != 0) {
@@ -1108,7 +1114,7 @@ void getWeather() {
       else
         uom = "&temperature_unit=fahrenheit&wind_speed_unit=mph";
                                                             
-       url = "/v1/forecast?latitude=" + String(c_vars[EV_LAT]) + "&longitude=" + String(c_vars[EV_LONG]) + "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m" + String(uom);
+       url = "/v1/forecast?latitude=" + String(c_vars[EV_LAT]) + "&longitude=" + String(c_vars[EV_LONG]) + "&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,is_day" + String(uom);
        break;
     case 5:  //WeatherUnlocked  this service requires a 2nd key, we will use WDEFINE to store it
       if (latlong)
@@ -1147,19 +1153,30 @@ void getWeather() {
 //  "weather":{"code":802,"icon":"c02d","description":"Scattered clouds"},"wind_cdir":"NNW","wind_cdir_full":"north-northwest","wind_dir":344,"wind_spd":9}]}
 
 // Sample response from api.weatherapi.com
-// {"location":{"name":"Summerville","region":"South Carolina","country":"USA","lat":33.02,"lon":-80.21,"tz_id":"America/New_York","localtime_epoch":1714070832,
+// {"location":{"name":"Summerville","region":"South Carolina","country":"USA","lat":33,"lon":-80,"tz_id":"America/New_York","localtime_epoch":1714070832,
 //  "localtime":"2024-04-25 14:47"},"current":{"temp_c":26.6,"temp_f":79.9,"is_day":1,"condition":{"text":"Sunny","icon":"//cdn.weatherapi.com/weather/64x64/day/113.png",
 //  "code":1000},"wind_mph":4.3,"wind_kph":6.8,"wind_degree":3,"wind_dir":"N","humidity":34,"cloud":21}}
 
 // Sample response from open-meteo
-// {"latitude":33.01305,"longitude":-80.204895,"generationtime_ms":0.09107589721679688,"utc_offset_seconds":0,"timezone":"GMT","timezone_abbreviation":"GMT","elevation":29.0,
+// {"latitude":33,"longitude":-80,"generationtime_ms":0.09107589721679688,"utc_offset_seconds":0,"timezone":"GMT","timezone_abbreviation":"GMT","elevation":29.0,
 // "current_units":{"time":"iso8601","interval":"seconds","temperature_2m":"°F","relative_humidity_2m":"%","weather_code":"wmo code","wind_speed_10m":"mp/h","wind_direction_10m":"°"},
 // "current":{"time":"2024-04-28T13:15","interval":900,"temperature_2m":70.3,"relative_humidity_2m":69,"weather_code":0,"wind_speed_10m":6.7,"wind_direction_10m":111}}
 
 // Sample response from WeatherUnlocked
-// {"lat":32.9,"lon":-80.04,"alt_m":14.0,"alt_ft":45.93,"wx_desc":"Mostly cloudy","wx_code":1,"wx_icon":"PartlyCloudyDay.gif","temp_c":28.3,"temp_f":82.94,"feelslike_c":29.39,
+// {"lat":32,"lon":-80,"alt_m":14.0,"alt_ft":45.93,"wx_desc":"Mostly cloudy","wx_code":1,"wx_icon":"PartlyCloudyDay.gif","temp_c":28.3,"temp_f":82.94,"feelslike_c":29.39,
 // "feelslike_f":84.9,"humid_pct":57.0,"windspd_mph":10.56,"windspd_kmh":17.0,"windspd_kts":9.18,"windspd_ms":4.72,"winddir_deg":200.0,"winddir_compass":"SSW","cloudtotal_pct":75.0,
 // "vis_km":16.0,"vis_mi":9.94,"vis_desc":null,"slp_mb":1018.6,"slp_in":30.16,"dewpoint_c":18.98,"dewpoint_f":66.16}
+
+// Sample response from PirateWeather
+// {"latitude":33,"longitude":-80,"timezone":"America/New_York","offset":-4,"elevation":89,"currently":{"time":1716214260,"summary":"Clear","icon":"clear-day",
+// "nearestStormDistance":120.8,"nearestStormBearing":23,"precipIntensity":0,"precipProbability":0,"precipIntensityError":0,"precipType":"none","temperature":71.42,
+// "apparentTemperature":70.94,"dewPoint":58.37,"humidity":0.72,"pressure":1012.13,"windSpeed":10.34,"windGust":15.51,"windBearing":39,"cloudCover":0.12,"uvIndex":4.3,
+// "visibility":10,"ozone":352.47},"alerts":[],"flags":{"sources":["ETOPO1","gfs","gefs","hrrrsubh","hrrr_0-18","nbm","nbm_fire","hrrr"],
+// "sourceTimes":{"hrrr_subh":"2024-05-20 12Z","hrrr_0-18":"2024-05-20 11Z","nbm":"2024-05-20 11Z","nbm_fire":"2024-05-20 06Z","hrrr_18-48":"2024-05-20 06Z","gfs":"2024-05-20 06Z",
+// "gefs":"2024-05-20 06Z"},"nearest-station":0,"units":"us","version":"V2.0.7"}}
+
+
+
 
 //  Serial.print("Free heap memory: ");
 //  Serial.print(ESP.getFreeHeap());
@@ -1201,7 +1218,7 @@ switch (atoi(c_vars[EV_WSERVICE])) {
       if (!doc["current"]["temp_c"]) { noTemp = true; break; }
       tempM = doc["current"]["temp_c"];
       wind_speed = doc["current"]["wind_kph"];
-      }
+    }
     else {
       if (!doc["current"]["temp_f"]) { noTemp = true; break; }
       tempM = doc["current"]["temp_f"];
@@ -1210,6 +1227,7 @@ switch (atoi(c_vars[EV_WSERVICE])) {
     humiM = doc["current"]["humidity"];
     wind_dir = convert_windir((doc["current"]["wind_degree"]));
     weatherCode = doc["current"]["condition"]["code"];
+    isDay = doc["current"]["is_day"];
     break;
   case 2:  //WeatherBit
     if (!doc["data"][0]["app_temp"]) { noTemp = true; break; }
@@ -1218,6 +1236,13 @@ switch (atoi(c_vars[EV_WSERVICE])) {
     wind_dir = convert_windir((doc["data"][0]["wind_dir"]));
     humiM = doc["data"][0]["rh"];
     weatherCode = doc["data"][0]["weather"]["code"];
+    pod = doc["data"][0]["pod"].as<String>();
+    Serial.print("Pod:");
+    Serial.println(pod);
+    if (pod == "d")
+      isDay = 1;
+    else
+      isDay = 0;
     break;
   case 3:  //PirateWeather
     if (!doc["currently"]["temperature"]) { noTemp = true; break; }
@@ -1236,6 +1261,7 @@ switch (atoi(c_vars[EV_WSERVICE])) {
     wind_dir = convert_windir((doc["current"]["wind_direction_10m"]));
     humiM = doc["current"]["relative_humidity_2m"];
     weatherCode = doc["current"]["weather_code"];
+    isDay = doc["current"]["is_day"];
     break;
   case 5:  //WeatherUnlocked
     if (String(c_vars[EV_METRIC]) == "Y") {
@@ -1267,7 +1293,6 @@ if (noTemp == true) {
   return;
 }
 
-
 /*
   Serial.print("Temp:");
   Serial.println(tempM);
@@ -1279,6 +1304,8 @@ if (noTemp == true) {
   Serial.println(wind_dir);
   Serial.print("Weathercode:");
   Serial.println(weatherCode);
+  Serial.print("isDay:");
+  Serial.println(isDay);
 */
 
 //Convert weather codes to text or animation
@@ -1491,6 +1518,7 @@ void convert_weathercode_openmeteo() {
       Serial.println(weatherCode);
       break;
   }
+
 }
 
 
@@ -1861,6 +1889,8 @@ void draw_weather() {
     cc = color_disp;
 
     if (String(c_vars[EV_WANI]) == "N") {
+      if (isDay == 1  && codeWT == 1)    //If it's daytime and sunny use differnt code for clear skies
+        codeWT = 26;
       TFDrawText(&display, weather_text[codeWT], wtext_x, wtext_y, cc_wtext);
     } else {
       draw_weather_conditions();
@@ -1933,38 +1963,57 @@ void draw_animations(int stp) {
   if (use_ani) {
     int *af = NULL;
 	
+//  Need to check for night time animation 
+    if (isDay == 0) {      
+      switch (codeWT) {
+        case 1:
+          codeWA = 8;    //Clear night
+          break;
+        case 2:
+          codeWA = 10;   //Partly cloudy night
+          break;
+        case 9:
+          codeWA = 9;    //Foggy night
+          break;
+        case 10:
+          codeWA = 11;   //Cloudy night
+          break;
+      }
+    }
+
+
     switch (codeWA) {
-      case 1:
+      case 1:  //Sunny
         af = suny_ani[stp % 5];
         break;
-      case 2:
+      case 2:  //Cloudy
         af = clod_ani[stp % 10];
         break;
-      case 3:
+      case 3:  //Overcast
         af = ovct_ani[stp % 5];
         break;
-      case 4:
+      case 4:  //Rainy
         af = rain_ani[stp % 5];
         break;
-      case 5:
+      case 5:  //Thunder
         af = thun_ani[stp % 5];
         break;
-      case 6:
+      case 6:  //Snow
         af = snow_ani[stp % 5];
         break;
-      case 7:
+      case 7:  //Mist
         af = mist_ani[stp % 4];
         break;
-      case 8:
+      case 8:  //Clear night
         af = mony_ani[stp % 17];
         break;
-      case 9:
+      case 9:  //Fog night
         af = mistn_ani[stp % 4];
         break;
-      case 10:
+      case 10:  //Partly Cloudy
         af = clodn_ani[stp % 10];
         break;
-      case 11:
+      case 11:  //Cloudy night
         af = ovctn_ani[stp % 1];
         break;
     }
