@@ -949,8 +949,8 @@ void setup() {
   TFDrawText(&display, String("  STARTING UP  "), 0, 10, cc_blu);
 
   //Use this for serial console delay to see all serial.prints for debugging
-  Serial.println("Waiting for input from keyboard before continuing .....");
-  while (Serial.available() == 0 ) {}
+  //Serial.println("Waiting for input from keyboard before continuing .....");
+  //while (Serial.available() == 0 ) {}
  
 
   Serial.println("Setup begin");
