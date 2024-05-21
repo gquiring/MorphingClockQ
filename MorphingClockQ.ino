@@ -3,6 +3,11 @@ Thanks to all who made this project possible!
 
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
+
+Update: 5/21/2024
+Animation weather needed additional code mapping since leaving OpenWeatherMap.  I think I got it this time!!
+Frankly though I still can't make sense of this animation, it's showing yellow pixels for some of the night icons, that makes no sense.
+
 Update: 5/20/2024
 Added isDay flag for night time mode animation.  The issue was the animation will show the sunny icon at night time, it needs to know day vs night.
 OpenWeatherMap used different codes for night time, these weather services do not.  OpenMeteo, WeatherAPI and WeatherBit support isDay to determine day/night.  
@@ -1044,7 +1049,7 @@ void getWeather() {
   String cord = "";
   String url = "";
   String loc = "";
-   String WeatherTXT = "";
+  String WeatherTXT = "";
   
   //If the weather API keys are in the array it will use them instead of the config file
    if ( apikeys[atoi(c_vars[EV_WSERVICE]) - 1].length() != 0) {
@@ -1124,7 +1129,7 @@ void getWeather() {
 
       url = "/api/current/" + String(loc) + "?app_id=" + String(c_vars[EV_WDEFINE]) + "&app_key=" + String(c_vars[EV_APIKEY]);
       break;
-    case 7:  //AccuWeather
+    case 7:  //AccuWeather (not working)
       url = "/currentconditions/v1/" + String(c_vars[EV_POSTAL]) + "?apikey=" + String(c_vars[EV_APIKEY]) + "&details=true";
       break;
     default:
@@ -1237,8 +1242,6 @@ switch (atoi(c_vars[EV_WSERVICE])) {
     humiM = doc["data"][0]["rh"];
     weatherCode = doc["data"][0]["weather"]["code"];
     pod = doc["data"][0]["pod"].as<String>();
-    Serial.print("Pod:");
-    Serial.println(pod);
     if (pod == "d")
       isDay = 1;
     else
@@ -1293,21 +1296,6 @@ if (noTemp == true) {
   return;
 }
 
-/*
-  Serial.print("Temp:");
-  Serial.println(tempM);
-  Serial.print("Humidity:");
-  Serial.println(humiM);
-  Serial.print("Wind_mph:");
-  Serial.println(wind_speed);
-  Serial.print("Wind_Direction:");
-  Serial.println(wind_dir);
-  Serial.print("Weathercode:");
-  Serial.println(weatherCode);
-  Serial.print("isDay:");
-  Serial.println(isDay);
-*/
-
 //Convert weather codes to text or animation
   switch (atoi(c_vars[EV_WSERVICE])) {
     case 1:
@@ -1324,6 +1312,50 @@ if (noTemp == true) {
       break;
   }
 
+//  Need to check for night time and use different animation scenes
+    if (isDay == 0) {      
+      switch (codeWT) {
+        case 1:
+          codeWA = 8;    //Clear night
+          break;
+        case 2:
+          codeWA = 10;   //Partly cloudy night
+          break;
+        case 3:
+          codeWA = 11;   //Cloudy night
+          break;
+        case 8:
+          codeWA = 8;    //Clear night
+          break;
+        case 9:
+          codeWA = 9;    //Foggy night
+          break;
+        case 10:
+          codeWA = 11;   //Cloudy night
+          break;
+      }
+    }
+  
+
+/*
+//Comment out after debugging is done all these Serial.print lines
+  Serial.print("Temp:");
+  Serial.println(tempM);
+  Serial.print("Humidity:");
+  Serial.println(humiM);
+  Serial.print("Wind_mph:");
+  Serial.println(wind_speed);
+  Serial.print("Wind_Direction:");
+  Serial.println(wind_dir);
+  Serial.print("Weathercode:");
+  Serial.println(weatherCode);
+  Serial.print("isDay:");
+  Serial.println(isDay);
+  Serial.print("codeWT:");
+  Serial.println(codeWT);
+  Serial.print("codeWA:");
+  Serial.println(codeWA);
+*/
 
 }
 // End of Get Weather
@@ -1464,9 +1496,6 @@ void convert_weathercode_weatherAPI() {
       break;
   }
 
- //   Serial.print("codeWT:");
- //   Serial.println(codeWT);
-
 }
 
 void convert_weathercode_openmeteo() {
@@ -1477,9 +1506,17 @@ void convert_weathercode_openmeteo() {
       codeWT = 1;
       codeWA = 1;
       break;
-    case 1 ... 3:
+    case 1:
+      codeWT = 1;
+      codeWA = 1;
+      break;
+    case 2:
       codeWT = 2;
-      codeWA = 10;
+      codeWA = 2;
+      break;
+    case 3:
+      codeWT = 3;
+      codeWA = 3;
       break;
     case 45 ... 48:
       codeWT = 9;
@@ -1609,9 +1646,6 @@ void convert_weathercode_weatherbitIO() {
           break;
       }
 
-//      Serial.print("codeWT:");
-//      Serial.println(codeWT);
-
 }
 
 void convert_weathercode_weatherUnlocked() {
@@ -1717,67 +1751,6 @@ void convert_weathercode_weatherUnlocked() {
           Serial.println(weatherCode);
           break;
       }
-}
-
-
-
-void draw_weather_conditions() {
-  if (codeWA < 0)
-    return;
-
-  xo = img_x;
-  yo = img_y;
-
-  switch (codeWA) {
-    case 1:  //sunny
-      DrawIcon(&display, sunny_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 2:  //cloudy
-      DrawIcon(&display, cloudy_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 3:  //overcast
-      DrawIcon(&display, ovrcst_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 4:  //rainy
-      DrawIcon(&display, rain_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 5:  //thunders
-      DrawIcon(&display, thndr_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 6:  //snow
-      DrawIcon(&display, snow_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 7:  //mist
-      DrawIcon(&display, mist_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 8:  //clear night
-      DrawIcon(&display, moony_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 9:  //fog night
-      DrawIcon(&display, mistn_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 10:  //partly cloudy night
-      DrawIcon(&display, cloudyn_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    case 11:  //cloudy night
-      DrawIcon(&display, ovrcstn_ico, xo, yo, 10, 5);
-      use_ani = 1;
-      break;
-    Default:
-	  TFDrawText (&display, String("     "), xo, yo, 0);
-	  use_ani = 1;
-      break;
-  }
 }
 
 
@@ -1955,6 +1928,67 @@ void draw_date() {
 }
 
 
+void draw_weather_conditions() {
+  if (codeWA < 0)
+    return;
+
+  xo = img_x;
+  yo = img_y;
+
+  switch (codeWA) {
+    case 1:  //sunny
+      DrawIcon(&display, sunny_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 2:  //cloudy
+      DrawIcon(&display, cloudy_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 3:  //overcast
+      DrawIcon(&display, ovrcst_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 4:  //rainy
+      DrawIcon(&display, rain_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 5:  //thunders
+      DrawIcon(&display, thndr_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 6:  //snow
+      DrawIcon(&display, snow_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 7:  //mist
+      DrawIcon(&display, mist_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 8:  //clear night
+      DrawIcon(&display, moony_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 9:  //fog night
+      DrawIcon(&display, mistn_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 10:  //partly cloudy night
+      DrawIcon(&display, cloudyn_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    case 11:  //cloudy night
+      DrawIcon(&display, ovrcstn_ico, xo, yo, 10, 5);
+      use_ani = 1;
+      break;
+    Default:
+	  TFDrawText (&display, String("     "), xo, yo, 0);
+	  use_ani = 1;
+      break;
+  }
+}
+
+
+
 void draw_animations(int stp) {
   //weather icon animation
   String lstr = "";
@@ -1963,25 +1997,6 @@ void draw_animations(int stp) {
   if (use_ani) {
     int *af = NULL;
 	
-//  Need to check for night time animation 
-    if (isDay == 0) {      
-      switch (codeWT) {
-        case 1:
-          codeWA = 8;    //Clear night
-          break;
-        case 2:
-          codeWA = 10;   //Partly cloudy night
-          break;
-        case 9:
-          codeWA = 9;    //Foggy night
-          break;
-        case 10:
-          codeWA = 11;   //Cloudy night
-          break;
-      }
-    }
-
-
     switch (codeWA) {
       case 1:  //Sunny
         af = suny_ani[stp % 5];
@@ -2028,7 +2043,6 @@ byte prevhh = 0;
 byte prevmm = 0;
 byte prevss = 0;
 long tnow;
-//WiFiClient httpcli;
 
 /*
 //convert hex letter to value
@@ -2179,8 +2193,8 @@ void loop() {
       prevmm = mm;
       draw_weather();
     }
-    //hours
 
+    //hours
     if (hh != prevhh) {
       display_updater();
       prevhh = hh;
