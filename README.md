@@ -4,7 +4,7 @@ If you already have the Morphing Clock installed prior to May 2024 you must wipe
 
 Please note when installing the board manager for the ESP8266 you must install the old version 2.7.4.  Newer versions will NOT compile.
 
-Due to the change with OpenWeatherMap requiring a new API call and your account must have a credit card on file ((starting June 2024) I have desided to discontinue using their service.  The weather code has been completely rewritten to be more flexible with multiple weather services.  It currently supports WeatherAPI, WeatherBit.io, PirateWeather, OpenMeteo and WeatherUnlocked.  I can add more weather services as long as they don't require a SSL connection and the JSON string is not huge.  
+Due to the change with OpenWeatherMap requiring a new API call and your account must have a credit card on file (starting June 2024) I have desided to discontinue using their service.  The weather code has been completely rewritten to be more flexible with multiple weather services.  It currently supports WeatherAPI, WeatherBit.io, PirateWeather, OpenMeteo and WeatherUnlocked.  I can add more weather services as long as they don't require a SSL connection and the JSON string is not huge.  
 
 Edit the paramsEDITMEFIRST.h file (which needs to be renamed to params.h). You must setup your SSID, password and weather location.
 
@@ -18,7 +18,7 @@ The web page has been entirely redone using the Async library.  It's much easier
 
 Instead of searching for all the libraries I made a Zip file on Google Drive for an easier install.  The link is in the .ino source.  
 
-Hardware instuctions are on youtube.  The Arduino part is out of date use the below video.
+Hardware instuctions are on youtube:
 https://youtu.be/5IvTE6gUA08
 
 Software only instuctions (IDE, libraries, params.h)
