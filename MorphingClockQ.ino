@@ -4,6 +4,9 @@ Thanks to all who made this project possible!
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
+Update 3/30/2025
+Added OTA update ability. Updated component links and added diffuser link.  
+
 Update: 5/21/2024
 Animation weather needed additional code mapping since leaving OpenWeatherMap.  I think I got it this time!!
 Frankly though I still can't make sense of this animation, it's showing yellow pixels for some of the night icons, that makes no sense.
@@ -149,18 +152,26 @@ library/NTPCLientlib/src/NTClientlib.h
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
                                 COMPONENTS 
+                Listed below are two options for the LED display and the optional power supply
 
 P3 RGB Pixel panel HD Display 64x32 dot Matrix SMD2121 Led Module Indoor Screen Full Color Video Wall 192x96mm Message Board
 https://www.aliexpress.com/item/32728985432.html
 
-MELIFE 3pcs ESP8266 WiFi Development Module CH340 Serial Wireless Module NodeMcu Lua 4M WiFi WLAN Internet New Version Dev Board
-https://www.amazon.com/dp/B09F8GCVC8
+AZERONE Led Matrix Pixel 4MM Pitch led Panels Digital led Module Indoor led Display Screen RGB led Board 2121SMD 64x32 Dots (P4 256x128mm)
+https://www.amazon.com/dp/B07F2JW8D3
+
+NodeMCU CP2102 ESP-12E Development Board, USB-C
+https://www.amazon.com/dp/B0D8S7XVWH
 
 ALITOVE 5V 8A 40W AC to DC Adapter Power Supply Converter Transformer 5.5x2.5mm Plug AC 100V~240V Input
 https://www.amazon.com/dp/B078RZBL8X
 
 EDGELEC 120pcs Breadboard Jumper Wires 7.8 inch (7.8CM)
 https://www.amazon.com/dp/B07GD2BWPY
+
+Diffuser for LED display (Lystaii 9pcs Gel Light Filter Color Correction Colored Overlays Transparent Color Film) Tea Black
+https://www.amazon.com/dp/B0CN2T59V7
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 Provided 'AS IS', use at your own risk
@@ -188,6 +199,10 @@ this remix by timz3818 adds am/pm, working night mode (change brightness and col
 #include "Digit.h"
 #include "Digitsec.h"
 #include "params.h"    //File not found?  You have to rename paramsEDITTHISFIRST.h to params.h
+
+//OTA wireless updates
+#include <ArduinoOTA.h>
+
 
 
 //ESP8266 setup
@@ -231,12 +246,7 @@ const char ntpsvr[] = "time.google.com";
 
 
 //If you have more than one Morphing Clock you will need to change the hostname
-const char *WiFi_hostname = "MorphClockQ";
-
-//If you want to adjust color/brightness/position of screen objects you can do that in the following sections.
-byte day_bright = 70;  //sets daytime brightness; 70 is default. values higher than this may not work.
-byte dim_bright = 20;  // sets brightness for partly dimmed mode
-byte nm_bright = 25;   // sets brightness for night mode
+const char *WiFi_hostname = "MorphClockQ2";
 
 //=== SEGMENTS ===
 // This section determines the position of the HH:MM ss digits onscreen with format digit#(&display, 0, x_offset, y_offset, irrelevant_color)
@@ -935,6 +945,40 @@ int connect_wifi(String n_wifi, String n_pass) {
   return 0;
 }
 
+void setup_OTA()
+{
+    ArduinoOTA.onStart([]() {
+        Serial.println("Start updating...");
+    });
+    
+    ArduinoOTA.onEnd([]() {
+        Serial.println("\nUpdate Complete!");
+    });
+
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+        Serial.printf("Progress: %u%%\r", (progress * 100) / total);
+    });
+
+    ArduinoOTA.onError([](ota_error_t error) {
+        Serial.printf("Error[%u]: ", error);
+        if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+        else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+        else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+        else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+        else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    });
+
+    ArduinoOTA.begin();
+    Serial.println("Ready for OTA updates.");
+}
+
+//Convert wind direction from degrees to North,South etc...
+int convert_windir(String x) {
+  int w;
+  w = round(((x.toInt() % 360)) / 45.0) + 1;
+  return w;
+}
+
 //
 //SETUP BEGIN
 //
@@ -1020,15 +1064,10 @@ void setup() {
   //prep screen for clock display
 
   display.fillScreen(0);
+
+  setup_OTA();
 }
 // End Setup
-
-//Convert wind direction from degrees to North,South etc...
-int convert_windir(String x) {
-  int w;
-  w = round(((x.toInt() % 360)) / 45.0) + 1;
-  return w;
-}
 
 //Get the weather, parse the JSON response
 void getWeather() {
@@ -1771,6 +1810,7 @@ void draw_wind_humidity() {
       }
       TFDrawText(&display, wind_direction[wind_dir], wind_x, wind_y, cc_wht);  //Change Wind Direction color for readability
       TFDrawText(&display, wind_lstr, wind_x + 8, wind_y, cc_wind);
+
     } else {
       wind_lstr = String("CALM");
       TFDrawText(&display, wind_lstr, wind_x, wind_y, cc_wind);
@@ -2094,6 +2134,8 @@ void set_digit_color() {
 // Main program
 //
 void loop() {
+
+  ArduinoOTA.handle();
 
   digit1.DrawColon(cc_time);
   digit3.DrawColon(cc_time);
