@@ -4,6 +4,9 @@ Thanks to all who made this project possible!
 This remix by Gary Quiring
 https://github.com/gquiring/MorphingClockQ
 
+Update 7/28/2025
+Fixed display bug if temperature was over 99.  
+
 Update 3/30/2025
 Added OTA update ability. Updated component links and added diffuser link.  
 
@@ -310,7 +313,7 @@ int morph_off = 0;        // display issue due to weather check
 // to stop seeing data use "nosee" to move its position outside of the display range
 byte nosee = 100;
 
-// Set weather icon position; TF_cols = 4 by default
+// Set weather icon position; TF_cols = 4 by default  (TF_cols is the width of each character)
 byte img_x = 7 * TF_COLS + 1;
 byte img_y = 2;
 
@@ -323,8 +326,6 @@ byte tmp_x = 12 * TF_COLS;
 byte tmp_y = 2;
 
 // Wind position and label
-// I'm not clear on why the first position is shifted by TF_COLS wasting space
-//  byte wind_x = 1*TF_COLS;
 byte wind_x = 0;
 byte wind_y = 2;
 
@@ -334,7 +335,7 @@ byte humi_y = 2;
 char humi_label[] = "%";
 
 // Text weather condition
-byte wtext_x = 5 * TF_COLS - 3;
+byte wtext_x = 4 * TF_COLS;
 byte wtext_y = 2;
 
 String wind_lstr = "   ";
